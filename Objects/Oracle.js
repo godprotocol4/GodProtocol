@@ -93,6 +93,8 @@ class Oracle {
       let folder = this.gds.folder(this.hash(physical_address));
 
       if (config) {
+        folder.add_remote(config);
+
         result = folder.config;
       } else {
         if (!folder.check_remote(query.operation)) {
@@ -115,14 +117,8 @@ class Oracle {
           let operation = folder[query.operation];
 
           result =
-            operation && operation(query.query, { ...query.options, payload });
-
-          if (result) {
-            if (account) {
-              // let content = account.read(result.data);
-              // if (content != null) result.content = content;
-            }
-          }
+            operation &&
+            operation(query.query, { ...query.options, account, payload });
         }
       }
     } catch (e) {
