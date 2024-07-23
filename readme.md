@@ -116,7 +116,7 @@ Type `method`
 |              | string   | `account`          | Account instance to execute the instructions in.                                                                                                                                                          |
 | `cb`         | function |                    | A function that is called with the blocks mined during the execution.                                                                                                                                     |
 
-See the [package source](https://github.com/immanuel-savvy/godprotocol.git) for more details.
+See the [package source](https://github.com/godprotocol4/GodProtocol) for more details.
 
 [npm-url]: https://npmjs.org/package/godprotocol
 [downloads-url]: https://npmjs.org/package/godprotocol
