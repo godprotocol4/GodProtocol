@@ -18,7 +18,10 @@ class Manager {
   }
 
   initiate = (meta) => {
-    let initiator = this.add_account(process.env.INITIATOR, meta);
+    let initiator = this.add_account(
+      process.env.INITIATOR || "initiator",
+      meta
+    );
 
     return initiator;
   };
