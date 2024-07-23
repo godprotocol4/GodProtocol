@@ -5,13 +5,23 @@ import Blockweb from "./Blockweb";
 import Oracle from "./Oracle";
 
 class Manager {
-  constructor() {
+  constructor(meta) {
+    meta = meta || {};
+
+    this.compression = meta.compression;
+
     this.accounts = new Object();
     this.running = 0;
     this.tracks = new Object();
     this.web = new Blockweb(this);
-    this.oracle = new Oracle(this);
+    this.oracle = new Oracle(this, { compression: this.compression });
   }
+
+  initiate = (meta) => {
+    let initiator = this.add_account(process.env.INITIATOR, meta);
+
+    return initiator;
+  };
 
   start_clock = () => {
     let frequency = Number(process.env.HERTS) || 10;

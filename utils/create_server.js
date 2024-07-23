@@ -1,6 +1,5 @@
 import http from "http";
 import { is_port_available } from "./functions";
-import { initiator } from "../Index";
 
 let PORT = Number(process.env.PORT) || 1408;
 
@@ -22,7 +21,7 @@ const extension = (route, handler) => {
   handlers.push(handler);
 };
 
-const handle_routes = (req, res, app) => {
+const handle_routes = (req, res, app, initiator) => {
   let data = "";
 
   let is_in_default_routes = [
@@ -92,7 +91,9 @@ const create_server = async (app, settings) => {
   }
   PORT = port;
 
-  let server = http.createServer((req, res) => handle_routes(req, res, app));
+  let server = http.createServer((req, res) =>
+    handle_routes(req, res, app, settings.initiator)
+  );
 
   server.listen(port, () => {
     console.log(`\n...GOD PROTOCOL RUNNING :${port}`);
