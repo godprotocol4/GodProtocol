@@ -1,0 +1,267 @@
+import Loader_sequence from "../Loader_sequence/main";
+import validate_signature from "../utils/privacy";
+import { post_request } from "../utils/services";
+import Filesystem from "./Filesystem";
+import Virtual_machine from "./Virtual_machine";
+
+class Account extends Filesystem {
+  constructor(name, meta = {}) {
+    super();
+
+    meta = meta || {};
+
+    this.name = name;
+    this.private = meta.private;
+    this.manager = meta.manager;
+    this.account = this;
+    this.stdin = new Array();
+    this.stdout = new Array();
+
+    if (!this.manager) throw new Error("Manager instance missing.");
+
+    this.name_hash();
+    this.physical_address = `${this.base_address}/${this.name}`;
+    this.set_paths(this);
+
+    this.assembler = new Loader_sequence(this);
+
+    this.chain = this.account_chain(this);
+    this.vm = new Virtual_machine(this.chain);
+
+    this.mine_buffer = {};
+    this.privileges = new Object();
+
+    console.log(`Account Instance: ${this.name}`);
+  }
+
+  propagate = (data, endpoint) => {
+    if (data.is_propagated) return;
+
+    let servers = this.privileges[endpoint];
+
+    data.is_propagated = true;
+    data = JSON.stringify(data);
+
+    if (servers && servers.length) {
+      servers.map((serv) => {
+        post_request({
+          options: {
+            ...serv,
+            path: `/${endpoint}`,
+          },
+          data,
+        });
+      });
+    }
+  };
+
+  add_server = ({ server, privileges }) => {
+    if (!Array.isArray(privileges) && privileges)
+      privileges = ["load", "parse", "run", "create_account"];
+
+    privileges.map((privilege) => {
+      let priv = this.privileges[privilege];
+      if (!priv) {
+        priv = [];
+        this.privileges[privilege] = priv;
+      }
+      if (!priv.find((serv) => serv.domain === server.domain))
+        priv.push(server);
+    });
+  };
+
+  get_account = (name) => {
+    return this.manager.get_account(name) || this;
+  };
+
+  manage_buffer = (callback) => {
+    let call_session = `${Date.now()}-${Math.random()}`;
+    this.mine_buffer[call_session] = { blocks: [], callback };
+
+    return call_session;
+  };
+
+  buff = (block, pid) => {
+    let buffer = this.mine_buffer[pid];
+    if (!buffer) return;
+
+    buffer.blocks.push(block.stringify());
+  };
+
+  flush_buffer = (pid, payload) => {
+    let buff = this.mine_buffer[pid];
+    if (!buff) return;
+
+    buff.callback && this.run_callback(buff.callback, payload || buff.blocks);
+    delete this.mine_buffer[pid];
+  };
+
+  load = (payload) => {
+    let { program, signature, callback } = payload;
+    let { instructions, account } = program;
+    account = this.get_account(account);
+    account.propagate(payload, "load");
+
+    if (!account.validate(program, signature, callback)) return;
+
+    let pid = account.manage_buffer(callback);
+
+    this.manager.push({ sequence: instructions, account, pid });
+  };
+
+  parse = (program) => {
+    let { payload, callback } = program;
+    let { account } = payload;
+    account = this.get_account(account);
+    account.propagate(program, "parse");
+
+    account.manager.oracle.fetch(
+      payload,
+      (result) => account.run_callback(callback, result),
+      () =>
+        account.run_callback(callback, {
+          private: account.private,
+          error: true,
+          error_message: "Invalid signature",
+        })
+    );
+  };
+
+  run = (request) => {
+    let { payload, signature, callback } = request;
+
+    let { physical_address, account, query, history } = payload;
+
+    history = Math.abs(Number(history)) || 0;
+    account = this.get_account(account);
+    account.propagate(request, "run");
+
+    if (!account.validate(payload, signature, callback)) return;
+
+    let pid = account.manage_buffer(callback);
+
+    let context = physical_address
+      ? this.manager.web.get(physical_address)
+      : account.vm.get_context();
+
+    if (!context) {
+      if (physical_address)
+        context = this.manager.web.split_set(physical_address);
+      else return account.flush_buffer(pid);
+    }
+
+    let blk = query ? context.explore(query) : context.get_latest_block();
+
+    if (!query) {
+      let index = context.height;
+      index -= 2;
+
+      if (blk && blk.metadata.program) {
+        if (history) {
+          history--;
+          blk = null;
+        }
+      }
+
+      while (!blk && index >= 0) {
+        index--;
+        blk = context.get_block(index);
+
+        if (blk && blk.metadata.program) {
+          if (history) {
+            history--;
+            blk = null;
+          }
+        }
+      }
+    }
+
+    if (blk && blk.metadata && blk.metadata.program) {
+      let program = this.read(blk.metadata.program);
+
+      account.vm.contexts.push(context);
+      program.push("pop");
+
+      Array.isArray(program) &&
+        program.length &&
+        this.manager.push({
+          sequence: program,
+          account,
+          pid,
+        });
+    } else account.flush_buffer(pid);
+  };
+
+  run_callback = (callback, payload) => {
+    setTimeout(() => {
+      if (!callback) return;
+
+      if (typeof callback === "function") return callback(payload);
+
+      callback.payload &&
+        callback.payload.physical_address &&
+        this.vm.stdin(payload, () => this.run(callback));
+    }, 0);
+  };
+
+  flush_stdout = (block) => {
+    if (
+      block.chain.physical_address === `${this.physical_address}/Opcodes/stdout`
+    )
+      return;
+
+    for (let s = 0; s < this.stdout.length; s++) {
+      let out = this.stdout[s];
+      if (out.pid === this.vm.track.pid) {
+        block.metadata.stdout.push(out.data);
+        this.stdout[s] = null;
+      }
+    }
+    this.stdout = this.stdout.filter((out) => !!out);
+  };
+
+  validate = (payload, signature, callback) => {
+    if (!this.private) return true;
+
+    let valid = validate_signature(
+      this.name,
+      JSON.stringify(payload),
+      signature
+    );
+    if (!valid && callback)
+      this.run_callback(callback, {
+        private: this.private,
+        error: true,
+        error_message: "Invalid signature",
+      });
+
+    return valid;
+  };
+
+  stringify = (str) => {
+    let obj = {};
+
+    obj.name = this.name;
+    obj.hash = this.hash;
+    obj.path = this.path;
+    obj.private = this.private;
+    obj.chain = this.chain.stringify();
+    obj.physical_address = this.physical_address;
+
+    return str ? JSON.stringify(obj) : obj;
+  };
+
+  create_account = (payload) => {
+    this.propagate(payload, "create_account");
+    let { name, meta } = payload;
+
+    return this.manager.add_account(name, meta);
+  };
+
+  endpoint = (endpoint, payload) => {
+    let method = this[endpoint];
+    typeof method === "function" && method(payload);
+  };
+}
+
+export default Account;
