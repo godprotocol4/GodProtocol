@@ -1,6 +1,6 @@
 {
   "name": "godprotocol",
-  "version": "1.0.833",
+  "version": "1.0.836",
   "description": "A data mediator.",
   "main": "Index.js",
   "types": "types/index.d.ts",
@@ -22,12 +22,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/immanuel-savvy/godprotocol.git"
+    "url": "git+https://github.com/godprotocol4/godprotocol.git"
   },
   "bugs": {
-    "url": "https://github.com/immanuel-savvy/godprotocol/issues"
+    "url": "https://github.com/godprotocol4/godprotocol/issues"
   },
-  "homepage": "https://github.com/immanuel-savvy/godprotocol#readme",
+  "homepage": "https://github.com/godprotocol4/godprotocol#readme",
   "keywords": [
     "web 4.0",
     "framework",

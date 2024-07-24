@@ -46,7 +46,7 @@ const opcodes = (account) => {
 
   set("add_server", (args, vm) => account.add_server(args && args.op0));
 
-  [("run", "load", "parse", "create_account")].map((op) =>
+  ["run", "load", "parse", "create_account"].map((op) =>
     set(op, (arg) => arg && arg.op0 && account[op](arg && arg.op0))
   );
 };

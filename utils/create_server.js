@@ -12,13 +12,7 @@ const cb = (res, data) => {
 let extensions = new Object();
 
 const extension = (route, handler) => {
-  let handlers = extensions[route];
-  if (!handlers) {
-    handlers = new Array();
-    extensions[route] = handlers;
-  }
-
-  handlers.push(handler);
+  extensions[route] = handler;
 };
 
 const handle_routes = (req, res, app, initiator) => {
@@ -59,10 +53,9 @@ const handle_routes = (req, res, app, initiator) => {
       } else {
         let extension = extensions[req.url.slice(1)];
 
-        extension &&
-          extension.map((ex) => {
-            typeof ex === "function" && ex(data, { req, res });
-          });
+        if (typeof extension !== "function") {
+          res.end("");
+        } else extension(data, { req, res });
       }
     });
 
