@@ -54,14 +54,15 @@ const handle_routes = (req, res, app, initiator) => {
         let extension = extensions[req.url.slice(1)];
 
         if (typeof extension !== "function") {
-          res.end("");
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: true, error_message: "Not Found" }));
         } else extension(data, { req, res });
       }
     });
 
     req.on("error", (e) => {
       // res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "error", message: e.message }));
+      res.end(JSON.stringify({ status: "error", error_message: e.message }));
     });
   } else {
     app && app(req, res);
