@@ -54,16 +54,7 @@ class Block {
     obj.hash = this.hash;
     obj.data = this.data;
     obj._id = this._id;
-    obj.children = this.children.map((ch) =>
-      ch.stringify
-        ? new Object({
-            hash: ch.hash,
-            chain: ch.chain.hash,
-            _id: ch._id,
-            physical_address: ch.chain.physical_address,
-          })
-        : ch
-    );
+    obj.children = this.children.map((ch) => ch._id);
     obj.chain = {
       hash: this.chain.hash,
       physical_address: this.chain.physical_address,

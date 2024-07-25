@@ -28,24 +28,22 @@ class Chain extends Explorer {
     this.generate_hash();
 
     this.folder = this.account.manager.oracle.gds.folder(this.hash);
-    this.height = this.folder.config.total_files;
-    this.prev_hash = this.folder.config.recent_file;
-
-    this.manage_config(true);
+    this.height = this.folder.config.stats.total_files;
+    this.prev_hash = this.folder.config.stats.recent_file;
 
     this.account.set_paths(this);
+
+    this.manage_config(true);
   }
 
   manage_config = (init) => {
     if (init) {
-      let dir = this.account.manager.oracle.fs.readdirSync(
-        this.folder.folder_path
-      );
+      let dir = this.account.manager.oracle.fs.readdirSync(this.folder.path);
       this.blocks = dir.filter((d) => d !== ".config");
       this.height = this.blocks.length;
     }
 
-    this.folder.config.object = { ...this.stringify() };
+    this.folder.config.add_entry("object", this.stringify());
   };
 
   append_buffer = () => {
@@ -70,7 +68,7 @@ class Chain extends Explorer {
 
   build_block = (blk) => {
     if (typeof blk === "string") {
-      let blk_data = this.folder.readone(blk);
+      let blk_data = this.folder.readone(blk, { depth: 1 });
 
       blk = Block.build(blk_data, this);
     }

@@ -1,4 +1,5 @@
 import { _id } from "generalised-datastore/utils/functions";
+import Repository from "./repository";
 
 let num_pattern = /^[+-]?\d+(\.\d+)?$/;
 // let str_pattern = /^["'][^"']*["']$/;
@@ -18,20 +19,7 @@ class Loader {
     this.programs_index = -1;
 
     // Code Repository
-    this.oracle = this.account.manager.oracle;
-    this.programs_folder = this.oracle.get_folder("programs", {
-      joins: ["codes"],
-    });
-    this.codes_folder = this.oracle.get_folder("codes");
-
-    this.globals = this.oracle.get_folder("globals", {
-      subfolder: ["global"],
-    });
-
-    if (!this.globals.readone({ global: "programs" }))
-      this.globals.write({ global: "programs", programs: [] });
-    if (!this.globals.readone({ global: "codes" }))
-      this.globals.write({ global: "codes", codes: [] });
+    this.repository = new Repository(this);
   }
 
   instruction_index = () => {
@@ -537,6 +525,8 @@ class Loader {
 
     this.compile(codes);
 
+    if (meta.instructions) return [...this.instructions];
+
     // console.log(JSON.stringify(this.instructions, null, 2), "hiya");
 
     this.account.load({
@@ -544,48 +534,8 @@ class Loader {
       callback: cb,
     });
 
-    let programs = this.globals.readone({ global: "programs" });
-    let codes_global = this.globals.readone({ global: "codes" });
-    this.program_configs.map((config) => {
-      let program = programs.programs.find(
-        (prog) => prog.physical_address === config.physical_address
-      );
+    this.program_configs.map((config) => this.repository.add_program(config));
 
-      let code_str = config.codes.join("\n");
-      let code_hash = this.oracle.hash(code_str);
-      let code = codes_global.codes.find((cod) => cod.hash === code_hash);
-      let code_id = code && code.code_id;
-      if (!code_id) {
-        code_id = _id("codes");
-
-        this.globals.update(
-          { global: "codes" },
-          { codes: { $unshift: { code_id, hash: code_hash } } }
-        );
-      }
-
-      if (program) {
-        config._id = program.program_id;
-        this.programs_folder.update(config._id, {
-          ...config,
-          codes: { $unshift: code_id },
-        });
-      } else {
-        this.programs_folder.write({ ...config, codes: [code_id] });
-        this.globals.update(
-          { global: "programs" },
-          {
-            programs: {
-              $unshift: {
-                physical_address: config.physical_address,
-                program_id: config._id,
-              },
-            },
-          }
-        );
-      }
-      !code && this.codes_folder.write({ codes: code_str, _id: code_id });
-    });
     this.program_configs = [];
     this.instructions = [];
     this.pure = false;

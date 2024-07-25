@@ -97,16 +97,20 @@ class Account extends Filesystem {
   };
 
   load = (payload) => {
-    let { program, signature, callback } = payload;
+    let { program, signature, callback, assemble } = payload;
     let { instructions, account } = program;
     account = this.get_account(account);
     account.propagate(payload, "load");
 
     if (!account.validate(program, signature, callback)) return;
 
-    let pid = account.manage_buffer(callback);
+    if (assemble) {
+      this.assembler.run(instructions, { cb: callback });
+    } else {
+      let pid = account.manage_buffer(callback);
 
-    this.manager.push({ sequence: instructions, account, pid });
+      this.manager.push({ sequence: instructions, account, pid });
+    }
   };
 
   parse = (program) => {

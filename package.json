@@ -46,7 +46,7 @@
     "crypto": "^1.0.1",
     "elliptic": "^6.5.5",
     "fs": "^0.0.1-security",
-    "generalised-datastore": "^1.7.85"
+    "generalised-datastore": "^2.0.112"
   },
   "publishConfig": {
     "ignore": [

@@ -74,7 +74,7 @@ class Oracle {
     this.fs.writeFileSync(address, data, { encoding: "utf-8" });
   };
 
-  fetch = (payload, callback, val_err_cb) => {
+  fetch = async (payload, callback, val_err_cb) => {
     let { physical_address, config, query, account, signature } = payload,
       result;
 
@@ -90,12 +90,16 @@ class Oracle {
         return typeof val_err_cb === "function" && val_err_cb();
 
     try {
-      let folder = this.gds.folder(this.hash(physical_address));
+      let folder = this.gds.folder(
+        physical_address.includes("/")
+          ? this.hash(physical_address)
+          : physical_address
+      );
 
       if (config) {
         folder.add_remote(config);
 
-        result = folder.config;
+        result = folder.config.stringify();
       } else {
         if (!folder.check_remote(query.operation)) {
           result = {
@@ -109,7 +113,7 @@ class Oracle {
             if (compressed_result && compressed_result.halt)
               return (
                 typeof callback === "function" &&
-                callback({ compressed: true, data: compressed_result })
+                (await callback({ compressed: true, data: compressed_result }))
               );
             query = (compressed_result && compressed_result.query) || query;
           }
@@ -118,7 +122,11 @@ class Oracle {
 
           result =
             operation &&
-            operation(query.query, { ...query.options, account, payload });
+            (await operation(query.query, {
+              ...query.options,
+              account,
+              payload,
+            }));
         }
       }
     } catch (e) {

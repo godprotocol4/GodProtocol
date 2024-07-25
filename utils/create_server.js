@@ -1,7 +1,7 @@
 import http from "http";
 import { is_port_available } from "./functions";
 
-let PORT = Number(process.env.PORT) || 1408;
+let PORT = Number(process.env.PORT) || 1409;
 
 const cb = (res, data) => {
   if (typeof data !== "string") data = JSON.stringify(data);
