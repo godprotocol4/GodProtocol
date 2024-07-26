@@ -49,12 +49,22 @@ let obj = {
   },
 };
 
-const framer = (initiator) => {
+const framer = (initiator, cb) => {
   let frame = new Frame(obj);
   frame.to_instruction();
   let instructions = frame.flatten_instructions();
 
-  initiator.load({ program: { instructions } });
+  let start = Date.now();
+  initiator.load({
+    program: { instructions },
+    callback: (blks) => {
+      console.log(
+        `Account:${initiator.name} is ready in ${Date.now() - start}ms.`
+      );
+
+      cb && cb(blks);
+    },
+  });
 };
 
 export default framer;

@@ -44,10 +44,14 @@ const opcodes = (account) => {
 
   set("hold", (arg) => (vm.track.hold = !!arg.op0));
 
-  set("add_server", (args, vm) => account.add_server(args && args.op0));
+  set("add_server", (args) => account.add_server(args && args.op0));
 
-  ["run", "load", "parse", "create_account"].map((op) =>
-    set(op, (arg) => arg && arg.op0 && account[op](arg && arg.op0))
+  ["run", "load", "parse"].map((op) =>
+    set(op, (arg) => arg && arg.op0 && manager.endpoint(op, arg && arg.op0))
+  );
+
+  set("add_account", (arg) =>
+    manager.add_account({ ...arg.op0, string: true })
   );
 };
 

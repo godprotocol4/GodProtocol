@@ -2,11 +2,11 @@ import Manager from "./Objects/Manager";
 import create_server from "./utils/create_server";
 
 let manager = new Manager();
-let initiator = manager.initiate();
 
-setTimeout(() => {
-  initiator.assembler.run(
-    `@/datastore/main
+let initiator = manager.initiate({
+  on_framed: () =>
+    initiator.assembler.run(
+      `@/datastore/main
 
 @/datastore/main/grey
 >matter 'lola'
@@ -16,20 +16,15 @@ setTimeout(() => {
     >storage {}
     
     ;`,
-    {
-      cb: (blks) => {
-        console.log(
-          blks.map(
-            (bl) =>
-              new Object({ phy: bl.chain.physical_address, index: bl.index })
-          )
-        );
-      },
-    }
-  );
-}, 1500);
+      {
+        cb: (blks) => {
+          console.log(!!blks, "did");
+        },
+      }
+    ),
+});
 
-create_server(null, { initiator });
+create_server(null, { manager });
 
 export default Manager;
 export { create_server };

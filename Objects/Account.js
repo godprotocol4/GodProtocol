@@ -31,8 +31,25 @@ class Account extends Filesystem {
     this.mine_buffer = {};
     this.privileges = new Object();
 
+    this.events = new Object();
+
     console.log(`Account Instance: ${this.name}`);
   }
+
+  on = (event, handler) => {
+    let handlers = this.events[event];
+    if (!handlers) {
+      handlers = new Array();
+      this.events[event] = handlers;
+    }
+    handlers.push(handler);
+  };
+
+  emit = (event, data) => {
+    let handlers = this.events[event];
+    Array.isArray(handlers) &&
+      handlers.map((handle) => this.run_callback(handle, data));
+  };
 
   propagate = (data, endpoint) => {
     if (data.is_propagated) return;
@@ -97,61 +114,49 @@ class Account extends Filesystem {
   };
 
   load = (payload) => {
-    let { program, signature, callback, assemble } = payload;
-    let { instructions, account } = program;
-    account = this.get_account(account);
-    account.propagate(payload, "load");
+    let { program, callback } = payload;
+    let { instructions, assemble } = program;
 
-    if (!account.validate(program, signature, callback)) return;
+    this.propagate(payload, "load");
 
     if (assemble) {
       this.assembler.run(instructions, { cb: callback });
     } else {
-      let pid = account.manage_buffer(callback);
+      let pid = this.manage_buffer(callback);
 
-      this.manager.push({ sequence: instructions, account, pid });
+      this.manager.push({ sequence: instructions, account: this, pid });
     }
   };
 
   parse = (program) => {
-    let { payload, callback } = program;
-    let { account } = payload;
-    account = this.get_account(account);
-    account.propagate(program, "parse");
+    let { payload, callback, signature } = program;
 
-    account.manager.oracle.fetch(
-      payload,
-      (result) => account.run_callback(callback, result),
-      () =>
-        account.run_callback(callback, {
-          private: account.private,
-          error: true,
-          error_message: "Invalid signature",
-        })
+    this.propagate(program, "parse");
+
+    this.manager.oracle.fetch({ ...payload, signature }, (result) =>
+      this.run_callback(callback, result)
     );
   };
 
   run = (request) => {
-    let { payload, signature, callback } = request;
+    let { payload, callback } = request;
 
-    let { physical_address, account, query, history } = payload;
+    let { physical_address, query, history } = payload;
 
     history = Math.abs(Number(history)) || 0;
-    account = this.get_account(account);
-    account.propagate(request, "run");
 
-    if (!account.validate(payload, signature, callback)) return;
+    this.propagate(request, "run");
 
-    let pid = account.manage_buffer(callback);
+    let pid = this.manage_buffer(callback);
 
     let context = physical_address
       ? this.manager.web.get(physical_address)
-      : account.vm.get_context();
+      : this.vm.get_context();
 
     if (!context) {
       if (physical_address)
         context = this.manager.web.split_set(physical_address);
-      else return account.flush_buffer(pid);
+      else return this.flush_buffer(pid);
     }
 
     let blk = query ? context.explore(query) : context.get_latest_block();
@@ -183,17 +188,17 @@ class Account extends Filesystem {
     if (blk && blk.metadata && blk.metadata.program) {
       let program = this.read(blk.metadata.program);
 
-      account.vm.contexts.push(context);
+      this.vm.contexts.push(context);
       program.push("pop");
 
       Array.isArray(program) &&
         program.length &&
         this.manager.push({
           sequence: program,
-          account,
+          account: this,
           pid,
         });
-    } else account.flush_buffer(pid);
+    } else this.flush_buffer(pid);
   };
 
   run_callback = (callback, payload) => {
@@ -260,11 +265,6 @@ class Account extends Filesystem {
     let { name, meta } = payload;
 
     return this.manager.add_account(name, meta);
-  };
-
-  endpoint = (endpoint, payload) => {
-    let method = this[endpoint];
-    typeof method === "function" && method(payload);
   };
 }
 

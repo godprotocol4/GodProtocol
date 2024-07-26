@@ -74,65 +74,30 @@ class Oracle {
     this.fs.writeFileSync(address, data, { encoding: "utf-8" });
   };
 
-  fetch = async (payload, callback, val_err_cb) => {
-    let { physical_address, config, query, account, signature } = payload,
+  fetch = async (payload, callback) => {
+    let { physical_address, config, remote, query } = payload,
       result;
 
-    account = this.mgr.get_account(account);
-    if (account && account.private)
-      if (
-        !account.validate(
-          { physical_address, account, query },
-          signature,
-          callback
-        )
-      )
-        return typeof val_err_cb === "function" && val_err_cb();
+    let folder = this.get_folder(physical_address);
 
-    try {
-      let folder = this.gds.folder(
-        physical_address.includes("/")
-          ? this.hash(physical_address)
-          : physical_address
-      );
-
-      if (config) {
-        folder.add_remote(config);
-
-        result = folder.config.stringify();
+    if (config) {
+      result = folder.config.stringify();
+      folder.add_remote(remote);
+    } else {
+      if (!folder.check_remote(query.operation)) {
+        result = {
+          error: true,
+          error_message: "Query operation cannot be performed remotely.",
+        };
       } else {
-        if (!folder.check_remote(query.operation)) {
-          result = {
-            error: true,
-            error_message: "Forbidden remote operations",
-            payload,
-          };
-        } else {
-          if (query.operation === "call") {
-            let compressed_result = this.compression({ payload, val_err_cb });
-            if (compressed_result && compressed_result.halt)
-              return (
-                typeof callback === "function" &&
-                (await callback({ compressed: true, data: compressed_result }))
-              );
-            query = (compressed_result && compressed_result.query) || query;
-          }
+        let op = folder[query.operation];
 
-          let operation = folder[query.operation];
-
-          result =
-            operation &&
-            (await operation(query.query, {
-              ...query.options,
-              account,
-              payload,
-            }));
-        }
+        result = await op(query.query, query.options);
+        folder.remote_stuff(remote, result);
       }
-    } catch (e) {
-      result = { error: true, message: e.message, payload };
     }
-    typeof callback === "function" && callback(result);
+
+    callback(result);
   };
 }
 

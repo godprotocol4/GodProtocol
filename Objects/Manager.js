@@ -18,12 +18,12 @@ class Manager {
   }
 
   initiate = (meta) => {
-    let initiator = this.add_account(
+    this.initiator = this.add_account(
       process.env.INITIATOR || "initiator",
       meta
     );
 
-    return initiator;
+    return this.initiator;
   };
 
   start_clock = () => {
@@ -59,19 +59,29 @@ class Manager {
   get_account = (name) => this.accounts[name];
 
   add_account = (name, meta) => {
-    let account = this.get_account(name);
+    meta = meta || {};
+    if (!name) name = meta.name;
 
-    if (!account) {
-      account = new Account(name, { ...meta, manager: this });
-      opcodes(account);
-      framer(account);
+    let account;
+    if (!name) {
+      account = { error: true, error_message: "Name cannot be blank" };
+    } else {
+      account = this.get_account(name);
 
-      this.accounts[account.name] = account;
-    } else if (meta && meta.private && !account.private) {
-      account.private = true;
+      if (!account) {
+        account = new Account(name, { ...meta, manager: this });
+
+        opcodes(account);
+        framer(account, meta.on_framed);
+
+        this.accounts[account.name] = account;
+        if (meta.string) account = account.stringify();
+      } else if (meta && meta.private && !account.private) {
+        account.private = true;
+      }
     }
 
-    return account;
+    return meta.string ? JSON.stringify(account) : account;
   };
 
   push = (program) => {
@@ -86,6 +96,23 @@ class Manager {
       this.running++;
       this.running === 1 && this.start_clock();
     }
+  };
+
+  get_initiator = () => this.initiator || this.initiate();
+
+  endpoint = (endpoint, payload, callback) => {
+    let account = this.get_account(payload.account);
+    if (!account) {
+      return this.get_initiator().run_callback(callback, {
+        error: true,
+        error_message: "Account is not found",
+        payload,
+        endpoint,
+      });
+    }
+
+    let method = this[endpoint];
+    typeof method === "function" && method({ ...payload, callback });
   };
 }
 

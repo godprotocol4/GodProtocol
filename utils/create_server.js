@@ -15,7 +15,7 @@ const extension = (route, handler) => {
   extensions[route] = handler;
 };
 
-const handle_routes = (req, res, app, initiator) => {
+const handle_routes = (req, res, app, manager) => {
   let data = "";
 
   let is_in_default_routes = [
@@ -42,14 +42,13 @@ const handle_routes = (req, res, app, initiator) => {
       }
 
       if (req.url === "/create_account") {
-        let account = initiator.create_account(data);
-        res.end(account.stringify(true));
+        let account = manager.add_account(null, { ...data, string: true });
+
+        res.end(account);
       } else if (["run", "load", "parse"].includes(req.url.slice(1))) {
-        let payload = {
-          ...data,
-          callback: (datagram) => cb(res, datagram),
-        };
-        initiator.endpoint(req.url.slice(1), payload);
+        manager.endpoint(req.url.slice(1), payload, (datagram) =>
+          cb(res, datagram)
+        );
       } else {
         let extension = extensions[req.url.slice(1)];
 
@@ -86,7 +85,7 @@ const create_server = async (app, settings) => {
   PORT = port;
 
   let server = http.createServer((req, res) =>
-    handle_routes(req, res, app, settings.initiator)
+    handle_routes(req, res, app, settings.manager)
   );
 
   server.listen(port, () => {
