@@ -1,3 +1,4 @@
+import { _id } from "generalised-datastore/utils/functions";
 import framer from "../framer";
 import opcodes from "../opcodes";
 import Account from "./Account";
@@ -9,13 +10,23 @@ class Manager {
     meta = meta || {};
 
     this.compression = meta.compression;
-
+    this.manager_id = _id("manager");
     this.accounts = new Object();
     this.running = 0;
     this.tracks = new Object();
     this.web = new Blockweb(this);
     this.oracle = new Oracle(this, { compression: this.compression });
+    this.servers = new Array();
   }
+
+  stringify = (str) => {
+    let obj = {
+      _id: this.manager_id,
+      servers: this.servers,
+    };
+
+    return str ? JSON.stringify(obj) : obj;
+  };
 
   initiate = (meta) => {
     this.initiator = this.add_account(
@@ -113,6 +124,10 @@ class Manager {
 
     let method = this[endpoint];
     typeof method === "function" && method({ ...payload, callback });
+  };
+
+  add_server = (server) => {
+    this.servers.push(server);
   };
 }
 
