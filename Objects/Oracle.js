@@ -37,9 +37,8 @@ class Oracle {
     if (!obj) {
       try {
         obj = this.fs.readFileSync(`${this.mgr.initiator.root}/${path}`);
-
-        obj = JSON.parse(obj).data;
-        let type = obj && obj.data && typeof obj.data;
+        obj = JSON.parse(obj).payload;
+        let type = obj && obj.payload && typeof obj.payload;
         type =
           type === "object" ? (Array.isArray(obj) ? "array" : "twain") : type;
 
