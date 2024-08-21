@@ -122,6 +122,8 @@ class Chain extends Explorer {
   };
 
   add_block = (block) => {
+    let recent_blk = this.get_latest_block();
+    block.previous_hash = recent_blk && recent_blk._id;
     this.blocks.push(block);
     this.height = this.blocks.length;
   };

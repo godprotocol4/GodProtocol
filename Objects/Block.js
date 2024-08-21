@@ -52,6 +52,7 @@ class Block {
     obj.timelapse = this.timelapse;
     obj.index = this.index;
     obj.hash = this.hash;
+    obj.previous_hash = this.previous_hash;
     obj.data = this.data;
     obj._id = this._id;
     obj.children = this.children.map((ch) => ch._id);

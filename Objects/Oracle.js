@@ -10,7 +10,9 @@ class Oracle {
     this.fs = fs;
     this.mgr = mgr;
     this.datapaths = new Object();
-    this.gds = new GDS(process.env.DATASTORE || "godprotocol").sync({
+    this.gds = new GDS(
+      meta.datastore || process.env.DATASTORE || "godprotocol"
+    ).sync({
       manager: this.mgr,
     });
   }

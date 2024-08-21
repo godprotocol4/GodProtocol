@@ -15,7 +15,10 @@ class Manager {
     this.running = 0;
     this.tracks = new Object();
     this.web = new Blockweb(this);
-    this.oracle = new Oracle(this, { compression: this.compression });
+    this.oracle = new Oracle(this, {
+      compression: this.compression,
+      datastore: meta.datastore,
+    });
     this.servers = new Array();
   }
 
