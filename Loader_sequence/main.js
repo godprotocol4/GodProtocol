@@ -229,7 +229,9 @@ class Loader {
       if (line.type === "address")
         return this.push_instruction(`pop ${path[path.length - 1]}`);
     } else {
-      this.current_program().dimensions.push({ name: identifier.value });
+      let curr_program = this.current_program();
+      curr_program && curr_program.dimensions.push({ name: identifier.value });
+
       this.push_instruction(`chain ${identifier.value}`);
       this.stack_instruction([
         `link ${this.stacks.slice(-1)[0]}`,
@@ -542,7 +544,8 @@ class Loader {
       callback: cb,
     });
 
-    this.program_configs[0].main = this.repository.oracle.hash(codes);
+    let pragma = this.program_configs[0];
+    if (pragma) pragma.main = this.repository.oracle.hash(codes);
     console.log(this.program_configs);
     this.program_configs.map((config) => this.repository.add_program(config));
 

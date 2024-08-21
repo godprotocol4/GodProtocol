@@ -2,6 +2,7 @@ import { hash } from "../utils/hash";
 
 class Filesystem {
   constructor() {
+    this.root = process.env.ROOT || __dirname;
     this.base_address = process.env.BASE_ADDRESS || "Accounts";
   }
 
@@ -116,8 +117,8 @@ class Filesystem {
 
     let fs = this.manager.oracle.fs;
 
-    if (!fs.existsSync(chain.path)) {
-      fs.mkdirSync(chain.path, { recursive: true });
+    if (!fs.existsSync(`${this.root}/${chain.path}`)) {
+      fs.mkdirSync(`${this.root}/${chain.path}`, { recursive: true });
     }
   };
 

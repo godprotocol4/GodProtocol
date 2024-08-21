@@ -1,6 +1,6 @@
 {
   "name": "godprotocol",
-  "version": "1.0.839",
+  "version": "1.0.840",
   "description": "A data mediator.",
   "main": "Index.js",
   "types": "types/index.d.ts",

@@ -18,11 +18,25 @@ class Explorer {
 
     let obj;
     if (isNaN(q2)) {
-      obj = this[prop || "connections"].find((c) => c.hash === query[1]);
+      let arr = this[prop || "connections"];
+      for (let b = 0; b < arr.length; b++) {
+        let blk = this.build_block(arr[b]);
+        if (blk.hash === query[1]) {
+          obj = blk;
+          break;
+        }
+      }
     } else if (q2 >= 0) {
-      obj = this[prop || "connections"].find((q) => q.index === q2);
+      let arr = this[prop || "connections"];
+      for (let b = 0; b < arr.length; b++) {
+        let blk = this.build_block(arr[b]);
+        if (blk.index === q2) {
+          obj = blk;
+          break;
+        }
+      }
     } else {
-      obj = this[prop || "connections"].slice(q2)[0];
+      obj = this.build_block(this[prop || "connections"].slice(q2)[0]);
     }
 
     if (!prop)
