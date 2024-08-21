@@ -56,6 +56,17 @@ class Account extends Filesystem {
 
     let servers = this.privileges[endpoint];
 
+    if (data.exclusive) {
+      if (typeof data.exclusive === "boolean") return;
+      else if (Array.isArray(data.exclusive)) {
+        servers =
+          servers &&
+          servers.filter((serv) => {
+            return data.exclusive.includes(serv.domain);
+          });
+      }
+    }
+
     data.is_propagated = true;
     data = JSON.stringify(data);
 

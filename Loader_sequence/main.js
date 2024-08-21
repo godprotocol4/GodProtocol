@@ -65,6 +65,7 @@ class Loader {
     while (pos < line.length) {
       let char = line[pos].trim();
 
+      console.log(char);
       if (char === stop_char) return { tokens, pos };
 
       if (!char) {
@@ -76,7 +77,7 @@ class Loader {
       if (char === "\n") {
         line_number++;
         pos++;
-      } else if (char === "@") {
+      } else if (char === "@" || char === ".") {
         let acc = "";
         while (line[pos] && line[pos].trim()) {
           acc += line[pos];
@@ -110,7 +111,7 @@ class Loader {
         }
         pos++;
         push_token(acc, "string");
-      } else if (num_pattern.test(char)) {
+      } else if (num_pattern.test(char) || char === "-") {
         let acc = char;
         pos++;
         while (
@@ -281,6 +282,8 @@ class Loader {
     ]);
 
     tokens.slice(1).map((tok, i) => {
+      if (tok.type === "address") tok.value = this.resolve_addr(tok.value);
+
       if (tok.type === "address" && tok.value.match(this.marker_pattern)) {
         this.push_instruction([
           `link ${this.account.physical_address}/Datatypes/Number`,
@@ -476,6 +479,7 @@ class Loader {
     for (let c = 0; c < code_array.length; c++) {
       let line = code_array[c].trim();
 
+      console.log(line);
       let curr_program = this.current_program();
       this.is_routine = line.startsWith(".") || line.startsWith("@");
 
@@ -494,7 +498,8 @@ class Loader {
       if (line === ";") this.pop();
       else if (this.is_routine) this.parse_routine(line);
       else if (line.startsWith("//")) this.parse_comment(line.slice(2).trim());
-      else if (line.startsWith(">@")) this.parse_assignment(line, true);
+      else if (line.startsWith(">@") || line.startsWith(">."))
+        this.parse_assignment(line, true);
       else if (line.startsWith(">")) this.parse_assignment(line);
       else this.parse_opcode(line);
 

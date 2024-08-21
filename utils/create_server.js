@@ -90,7 +90,7 @@ const create_server = async (app, settings) => {
 
   server.listen(port, () => {
     console.log(`\n...GOD PROTOCOL RUNNING :${port}`);
-    manager.add_server({ ...settings.server_details, port: PORT });
+    settings.manager.add_server({ ...settings.server_details, port: PORT });
   });
 };
 

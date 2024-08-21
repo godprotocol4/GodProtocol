@@ -122,7 +122,16 @@ class Manager {
       });
     }
 
-    let method = this[endpoint];
+    if (
+      !account.validate(
+        payload.program || payload.payload,
+        payload.signature,
+        callback || payload.callback
+      )
+    )
+      return;
+
+    let method = account[endpoint];
     typeof method === "function" && method({ ...payload, callback });
   };
 
