@@ -131,7 +131,7 @@ class Account extends Filesystem {
     this.propagate(payload, "load");
 
     if (assemble) {
-      this.assembler.run(instructions, { cb: callback });
+      this.assembler.spawn().run(instructions, { cb: callback });
     } else {
       let pid = this.manage_buffer(callback);
 

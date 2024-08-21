@@ -473,6 +473,10 @@ class Loader {
     obj[index] = line.slice(1).join(":").trim();
   };
 
+  spawn = () => {
+    return new Loader(this.account);
+  };
+
   compile = (codes) => {
     let code_array = codes.split("\n");
 
