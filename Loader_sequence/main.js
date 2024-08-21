@@ -483,7 +483,6 @@ class Loader {
     for (let c = 0; c < code_array.length; c++) {
       let line = code_array[c].trim();
 
-      console.log(line);
       let curr_program = this.current_program();
       this.is_routine = line.startsWith(".") || line.startsWith("@");
 
@@ -544,6 +543,7 @@ class Loader {
     });
 
     this.program_configs[0].main = this.repository.oracle.hash(codes);
+    console.log(this.program_configs);
     this.program_configs.map((config) => this.repository.add_program(config));
 
     this.program_configs = [];

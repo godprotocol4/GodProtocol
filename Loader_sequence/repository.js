@@ -8,11 +8,12 @@ class Repository {
   }
 
   add_program = (config) => {
-    let code_hash = this.oracle.hash(config.codes);
+    let codes = config.codes.filter((line) => !!line.trim());
+    let code_hash = this.oracle.hash(codes);
     let code_exist = this.codes.readone({ hash: code_hash });
 
     let code = this.codes.write({
-      body: config.codes,
+      body: codes,
       hash: code_hash,
       _id: code_exist && code_exist._id,
     });
