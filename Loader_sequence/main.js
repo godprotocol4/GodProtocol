@@ -543,6 +543,7 @@ class Loader {
       callback: cb,
     });
 
+    this.program_configs[0].main = this.repository.oracle.hash(codes);
     this.program_configs.map((config) => this.repository.add_program(config));
 
     this.program_configs = [];
