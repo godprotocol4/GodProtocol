@@ -199,16 +199,16 @@ class Account extends Filesystem {
     if (blk && blk.metadata && blk.metadata.program) {
       let program = this.read(blk.metadata.program);
 
-      this.vm.contexts.push(context);
-      program.push("pop");
+      if (Array.isArray(program) && program.length) {
+        this.vm.contexts.push(context);
+        program.push("pop");
 
-      Array.isArray(program) &&
-        program.length &&
         this.manager.push({
           sequence: program,
           account: this,
           pid,
         });
+      }
     } else this.flush_buffer(pid);
   };
 
