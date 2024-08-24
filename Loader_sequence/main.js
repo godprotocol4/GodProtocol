@@ -476,7 +476,10 @@ class Loader {
   };
 
   spawn = () => {
-    return new Loader(this.account);
+    let spaw = new Loader(this.account);
+    spaw.opcodes = [...this.opcodes];
+
+    return spaw;
   };
 
   compile = (codes) => {
@@ -529,9 +532,8 @@ class Loader {
 
   run = (codes, meta) => {
     if (!meta) meta = {};
-    this.pure = meta && meta.pure;
-
-    let cb = meta && meta.cb;
+    let { pure, cb, options } = meta;
+    this.pure = pure;
 
     this.compile(codes);
 
@@ -545,7 +547,9 @@ class Loader {
     });
 
     let pragma = this.program_configs[0];
-    if (pragma) pragma.main = this.repository.oracle.hash(codes);
+    if (pragma)
+      pragma.main =
+        (options && options.main) || this.repository.oracle.hash(codes);
     console.log(this.program_configs);
     this.program_configs.map((config) => this.repository.add_program(config));
 

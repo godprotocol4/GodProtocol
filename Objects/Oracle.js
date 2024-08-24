@@ -36,7 +36,7 @@ class Oracle {
 
     if (!obj) {
       try {
-        obj = this.fs.readFileSync(`${this.mgr.initiator.root}/${path}`);
+        obj = this.fs.readFileSync(`${this.mgr.root}/${path}`);
         obj = JSON.parse(obj).payload;
         let type = obj && obj.payload && typeof obj.payload;
         type =
@@ -73,7 +73,7 @@ class Oracle {
       data: payload,
     });
 
-    this.fs.writeFileSync(`${this.mgr.initiator.root}/${address}`, data, {
+    this.fs.writeFileSync(`${this.mgr.root}/${address}`, data, {
       encoding: "utf-8",
     });
   };

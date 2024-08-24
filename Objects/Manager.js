@@ -13,6 +13,7 @@ class Manager {
     this.manager_id = _id("manager");
     this.accounts = new Object();
     this.running = 0;
+    this.root = meta.root || __dirname;
     this.tracks = new Object();
     this.web = new Blockweb(this);
     this.oracle = new Oracle(this, {

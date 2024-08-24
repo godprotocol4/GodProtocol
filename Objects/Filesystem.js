@@ -117,8 +117,8 @@ class Filesystem {
 
     let fs = this.manager.oracle.fs;
 
-    if (!fs.existsSync(`${this.root}/${chain.path}`)) {
-      fs.mkdirSync(`${this.root}/${chain.path}`, { recursive: true });
+    if (!fs.existsSync(`${this.manager.root}/${chain.path}`)) {
+      fs.mkdirSync(`${this.manager.root}/${chain.path}`, { recursive: true });
     }
   };
 

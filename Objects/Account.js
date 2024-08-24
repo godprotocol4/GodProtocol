@@ -131,7 +131,9 @@ class Account extends Filesystem {
     this.propagate(payload, "load");
 
     if (assemble) {
-      this.assembler.spawn().run(instructions, { cb: callback });
+      this.assembler
+        .spawn()
+        .run(instructions, { cb: callback, options: assemble });
     } else {
       let pid = this.manage_buffer(callback);
 
@@ -176,23 +178,23 @@ class Account extends Filesystem {
       let index = context.height;
       index -= 2;
 
-      if (blk && blk.metadata.program) {
-        if (history) {
-          history--;
-          blk = null;
-        }
-      }
-
-      while (!blk && index >= 0) {
-        index--;
-        blk = context.get_block(index);
-
+      const historic = (blk) => {
         if (blk && blk.metadata.program) {
           if (history) {
             history--;
             blk = null;
           }
-        }
+        } else blk = null;
+
+        return blk;
+      };
+      blk = historic(blk);
+
+      while (!blk && index >= 0) {
+        index--;
+        blk = context.get_block(index);
+
+        blk = historic(blk);
       }
     }
 
