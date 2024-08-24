@@ -120,7 +120,8 @@ class Account extends Filesystem {
     let buff = this.mine_buffer[pid];
     if (!buff) return;
 
-    buff.callback && this.run_callback(buff.callback, payload || buff.blocks);
+    buff.callback &&
+      this.run_callback(buff.callback, { payload, blocks: buff.blocks });
     delete this.mine_buffer[pid];
   };
 

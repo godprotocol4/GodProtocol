@@ -96,7 +96,8 @@ class Virtual_machine extends Opcodes {
 
         break;
       case "link":
-        chain = context.account.manager.web.get(args);
+        let web = context.account.manager.web;
+        chain = web.get(args) || web.split_set(args);
 
         if (!chain) {
           this.account.flush_buffer(this.track.pid, {
