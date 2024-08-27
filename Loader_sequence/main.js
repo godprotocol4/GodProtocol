@@ -1,7 +1,7 @@
 import { _id } from "generalised-datastore/utils/functions";
 import Repository from "./repository";
 
-let num_pattern = /^[+-]?\d+(\.\d+)?$/;
+let num_pattern = /^\d+(\.\d+)?$/;
 // let str_pattern = /^["'][^"']*["']$/;
 let var_pattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -23,11 +23,10 @@ class Loader {
   }
 
   instruction_index = () => {
-    let index = this.instruction_indexes.slice(-1);
-    index++;
-    this.instruction_indexes.splice(-1, 1, index);
+    let len = this.instruction_indexes.length - 1;
+    this.instruction_indexes[len]++;
 
-    return index;
+    return this.instruction_indexes[len];
   };
 
   stack_instruction = (instruction) => {
@@ -49,6 +48,7 @@ class Loader {
       this.instructions.push(instruction);
     } else {
       this.stack_instruction(`cursor ${this.instruction_index()}`);
+
       this.stack_instruction(`write ${instruction}`);
     }
   };
@@ -65,7 +65,6 @@ class Loader {
     while (pos < line.length) {
       let char = line[pos].trim();
 
-      console.log(char);
       if (char === stop_char) return { tokens, pos };
 
       if (!char) {
@@ -79,7 +78,7 @@ class Loader {
         pos++;
       } else if (char === "@" || char === ".") {
         let acc = "";
-        while (line[pos] && line[pos].trim()) {
+        while (line[pos] && line[pos].trim() && line[pos] !== stop_char) {
           acc += line[pos];
           pos++;
         }
@@ -92,12 +91,12 @@ class Loader {
       } else if (char === "[") {
         pos++;
         let toks = this.parse_tokens(line.slice(pos), "]");
-        push_token(toks.tokens, "array");
+        push_token([...toks.tokens], "array");
         pos += toks.pos + 1;
       } else if (char === "{") {
         pos++;
         let toks = this.parse_tokens(line.slice(pos), "}");
-        push_token(toks.tokens, "twain");
+        push_token([...toks.tokens], "twain");
         pos += toks.pos + 1;
       } else if (char === ">") {
         pos++;
@@ -127,7 +126,7 @@ class Loader {
       } else if (var_pattern.test(char)) {
         let acc = char;
         pos++;
-        while (line[pos] && var_pattern.test(`${line[pos].trim()}`)) {
+        while (line[pos] && var_pattern.test(`${acc}${line[pos]}`)) {
           acc += line[pos];
           pos++;
         }
@@ -284,7 +283,9 @@ class Loader {
     ]);
 
     tokens.slice(1).map((tok, i) => {
-      if (tok.type === "address") tok.value = this.resolve_addr(tok.value);
+      if (tok.type === "address") {
+        tok.value = this.resolve_addr(tok.value);
+      }
 
       if (tok.type === "address" && tok.value.match(this.marker_pattern)) {
         this.push_instruction([
@@ -321,7 +322,9 @@ class Loader {
 
     let real_addr = "";
 
-    if (addr[0] === "@") {
+    if (addr.length === 1) {
+      real_addr = addr.join("");
+    } else if (addr[0] === "@") {
       addr[0] = this.account.physical_address;
       real_addr = addr.join("/");
     } else if (addr[0] === ".." || addr[0] === ".") {
@@ -414,14 +417,15 @@ class Loader {
       markers = new Object();
       this.markers[curr_stack] = markers;
     }
-    markers[name] = this.instruction_index();
+
+    markers[name] = this.instruction_indexes.slice(-1)[0];
 
     this.revamp_marks();
 
     return splits.slice(1).join(" ");
   };
 
-  resolve_offset = (line, revamping) => {
+  resolve_offset = (line, revamping, index) => {
     let matches = line.match(this.marker_pattern),
       value;
     if (matches) {
@@ -436,11 +440,12 @@ class Loader {
       value = markers[match];
     }
 
-    if (typeof value === "number")
+    if (typeof value === "number") {
       line = line.replace(
         this.marker_pattern,
-        (revamping && value > 0 ? value - 1 : value).toString()
+        (revamping && value > 0 ? value + 1 : value).toString()
       );
+    }
 
     return line;
   };
@@ -540,6 +545,7 @@ class Loader {
     if (meta.instructions) return [...this.instructions];
 
     // console.log(JSON.stringify(this.instructions, null, 2), "hiya");
+    if (this.pure) this.account.log_output(this.instructions);
 
     this.account.load({
       program: { instructions: [...this.instructions] },
@@ -550,7 +556,6 @@ class Loader {
     if (pragma)
       pragma.main =
         (options && options.main) || this.repository.oracle.hash(codes);
-    console.log(this.program_configs);
     this.program_configs.map((config) => this.repository.add_program(config));
 
     this.program_configs = [];

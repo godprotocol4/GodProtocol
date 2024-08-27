@@ -17,7 +17,6 @@ class Chain extends Explorer {
     this.pending_children = new Array();
     this.connections = new Array();
 
-    this.blocks = new Array();
     this.txs = new Array();
 
     this.height = 0;
@@ -29,12 +28,18 @@ class Chain extends Explorer {
 
     this.folder = this.account.manager.oracle.gds.folder(this.hash);
     this.height = this.folder.config.stats.files;
+    this.blocks = new Array(this.height);
 
     this.account.set_paths(this);
 
     this.manage_config(true);
 
-    this.recent_block = this.build_block(this.folder.config.stats.recent_file);
+    if (this.folder.config.stats.recent_file) {
+      this.recent_block = this.build_block(
+        this.folder.config.stats.recent_file
+      );
+      this.blocks[this.recent_block.index] = this.recent_block;
+    }
   }
 
   manage_config = (init) => {
@@ -68,33 +73,34 @@ class Chain extends Explorer {
     if (typeof blk === "string") {
       let blk_data = this.folder.readone(blk, { depth: 1 });
 
-      if (blk_data) blk = Block.build(blk_data, this);
+      if (blk_data) {
+        blk = Block.build(blk_data, this);
+      }
     }
     return blk;
   };
 
   traverse_blocks = (stop) => {
-    let blk = this.recent_block;
-    while (blk.index !== stop) {
+    let blk = this.blocks.slice(stop).find((b) => b && b._id);
+
+    while (blk && blk.index !== stop) {
       blk = this.build_block(blk.previous_hash);
     }
     return blk;
   };
 
   get_block = (index) => {
-    let blk = this.build_block(this.blocks[index]);
+    let blk = this.blocks[index];
+
+    if (blk) blk = this.build_block(blk);
 
     if (!blk || (blk && blk.index !== index)) {
-      console.log(
-        "Twisted chain",
-        index,
-        blk && blk.index,
-        this.physical_address
-      );
+      // console.log("Twisted chain", index,blk&& blk.index, this.physical_address);
       if (index < this.height) {
         blk = this.traverse_blocks(index);
       }
     }
+    if (blk && blk.index) this.blocks[blk.index] = blk;
 
     return blk;
   };
@@ -136,16 +142,16 @@ class Chain extends Explorer {
       no_string: true,
     });
 
+    if (!data.previous_hash && data.index !== 0) throw new Error();
+
     this.folder.write(data);
 
     return block;
   };
 
   add_block = (block) => {
-    let recent_blk = this.get_latest_block();
-    block.previous_hash = recent_blk && recent_blk._id;
     this.blocks.push(block);
-    this.height = this.blocks.length;
+    this.height++;
 
     this.recent_block = block;
   };

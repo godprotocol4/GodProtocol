@@ -9,19 +9,31 @@ const opcodes = (account) => {
   let set = account.vm.set;
 
   ops.map((op) => {
+    if (op.jmp) {
+      let flag = op.name;
+      account.vm.flags[flag] = false;
+
+      set(`jmp_${flag}`, (args, vm) => jmp(args, vm, { flag }));
+      set(`jmp_not_${flag}`, (args, vm) =>
+        jmp(args, vm, { flag, inverse: true })
+      );
+    }
+
     set(op.name, (args) => {
       if (!args) return;
 
       try {
-        let result = eval(`${args.op0} ${op.sign} ${args.op1}`);
-        if (op.sign === "==") {
-          account.vm.flags.equal = !!result;
-          return;
+        let { op0, op1 } = args;
+        let result = eval(`op0 ${op.sign} op1`);
+
+        if (op.jmp) {
+          account.vm.flags[op.name] = !!result;
+          return Number(!!result);
         }
 
         return result;
       } catch (e) {
-        console.log(e.message);
+        console.log("opcodes: ", e.message);
       }
     });
   });

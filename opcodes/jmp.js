@@ -8,6 +8,8 @@ const jmp = (args, vm, meta) => {
 
   if ((condition || !flag) && typeof args.op0 === "number") {
     vm.track.pointer = args.op0;
+
+    vm.contexts.pop();
   }
 };
 

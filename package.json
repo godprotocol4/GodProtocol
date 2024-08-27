@@ -1,6 +1,6 @@
 {
   "name": "godprotocol",
-  "version": "1.0.842",
+  "version": "1.0.839",
   "description": "A data mediator.",
   "main": "Index.js",
   "types": "types/index.d.ts",
@@ -46,7 +46,7 @@
     "crypto": "^1.0.1",
     "elliptic": "^6.5.5",
     "fs": "^0.0.1-security",
-    "generalised-datastore": "^2.0.13"
+    "generalised-datastore": "^2.0.112"
   },
   "publishConfig": {
     "ignore": [

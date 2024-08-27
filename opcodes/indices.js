@@ -14,12 +14,12 @@ const setter = (args) => {
   if (typeof base === "number") return base;
 
   if (typeof base === "string") {
-    base = `${base.slice(0, args.op2)}${args.op1}${base.slice(args.op2 + 1)}`;
+    base = `${base.slice(0, args.op1)}${args.op2}${base.slice(args.op1 + 1)}`;
   } else {
     if (Array.isArray(base)) {
-      if (args.op2 == null || args.op2 >= base.length) base.push(args.op1);
-      else base[args.op2] = args.op1;
-    } else base[args.op2] = args.op1;
+      if (args.op1 == null || args.op1 >= base.length) base.push(args.op2);
+      else base[args.op1] = args.op2;
+    } else base[args.op1] = args.op2;
   }
 
   return base;

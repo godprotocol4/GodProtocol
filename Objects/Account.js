@@ -1,3 +1,4 @@
+
 import Loader_sequence from "../Loader_sequence/main";
 import validate_signature from "../utils/privacy";
 import { post_request } from "../utils/services";
@@ -17,6 +18,8 @@ class Account extends Filesystem {
     this.stdin = new Array();
     this.stdout = new Array();
 
+    this.log_output = this.manager.logger.store_log
+
     if (!this.manager) throw new Error("Manager instance missing.");
 
     this.name_hash();
@@ -33,7 +36,7 @@ class Account extends Filesystem {
 
     this.events = new Object();
 
-    console.log(`Account Instance: ${this.name}`);
+    this.log_output(`Account Instance: ${this.name}`);
   }
 
   on = (event, handler) => {
@@ -120,8 +123,7 @@ class Account extends Filesystem {
     let buff = this.mine_buffer[pid];
     if (!buff) return;
 
-    buff.callback &&
-      this.run_callback(buff.callback, { payload, blocks: buff.blocks });
+    buff.callback && this.run_callback(buff.callback,{ payload , blocks: buff.blocks});
     delete this.mine_buffer[pid];
   };
 
@@ -177,7 +179,8 @@ class Account extends Filesystem {
 
     if (!query) {
       let index = context.height;
-      index -= 2;
+      index -= 1;
+      // console.log(index, context.height, 'mee')
 
       const historic = (blk) => {
         if (blk && blk.metadata.program) {
@@ -186,7 +189,7 @@ class Account extends Filesystem {
             blk = null;
           }
         } else blk = null;
-
+// console.log(blk && blk.metadata, 'hello.')
         return blk;
       };
       blk = historic(blk);
@@ -200,11 +203,13 @@ class Account extends Filesystem {
     }
 
     if (blk && blk.metadata && blk.metadata.program) {
+      // console.log(blk.metadata, blk.index, context.height)
       let program = this.read(blk.metadata.program);
+      // console.log(JSON.stringify(program, null, 2), 'prog')
 
       if (Array.isArray(program) && program.length) {
         this.vm.contexts.push(context);
-        program.push("pop");
+        program = [...program, 'pop']
 
         this.manager.push({
           sequence: program,

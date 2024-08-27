@@ -68,13 +68,14 @@ class Virtual_machine extends Opcodes {
 
     let { opcode, args } = this.split_instruction(instruction);
 
-    let context = this.get_context();
+    let context = this.get_context(-1);
 
     if (!context) return;
 
     context.add_tx(instruction);
 
-    // console.log(instruction);
+    // console.log(`(${track.pointer}/${track.sequence.length})>> ${instruction}`)
+    // this.account.log_output(`>> ${instruction}`);
 
     let chain;
 
@@ -83,6 +84,7 @@ class Virtual_machine extends Opcodes {
     switch (opcode) {
       case "chain":
         chain = context.account.add_chain(args, context);
+
         this.contexts.push(chain);
 
         let dim = context.folder.config.dimensions;
@@ -129,6 +131,7 @@ class Virtual_machine extends Opcodes {
           blk = context.get_latest_block();
           if (blk) this.get_context(-2).connections.push(blk);
 
+          context.get_buffer();
           context.txs = [];
         }
         blk && this.account.buff(blk, this.track.pid);

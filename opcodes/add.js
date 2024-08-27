@@ -4,7 +4,11 @@ let ops = [
   { name: "subtract", sign: "-" },
   { name: "divide", sign: "/" },
   { name: "exp", sign: "**" },
-  { name: "equal", sign: "==" },
+  { name: "equal", sign: "==", jmp: true },
+  { name: "gt", sign: ">", jmp: true },
+  { name: "lt", sign: "<", jmp: true },
+  { name: "lte", sign: "<=", jmp: true },
+  { name: "gte", sign: ">=", jmp: true },
 ];
 
 export { ops };

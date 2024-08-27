@@ -7,18 +7,12 @@ class Block {
     this.data = this.chain.txs;
     this.metadata = {};
     this.children = new Array();
-    this.index = this.chain.blocks.length;
+    this.index = this.chain.height;
     this._id = _id(this.chain.hash);
-
-    this.blocks_folder = this.chain.account.manager.oracle.gds.folder(
-      process.env.BLOCKS_FOLDER || "blocks"
-    );
+    this.previous_hash = this.chain.recent_block && this.chain.recent_block._id;
   }
 
   generate_hash = () => {
-    this.previous_hash = this.chain.get_latest_block();
-    if (this.previous_hash) this.previous_hash = this.previous_hash.hash;
-
     this.hash = hash(JSON.stringify(this.data));
   };
 
@@ -71,6 +65,7 @@ class Block {
     blck.datapath = data.datapath;
     blck.timelapse = data.timelapse;
     blck.index = data.index;
+    blck.previous_hash = data.previous_hash;
     blck.hash = data.hash;
     blck.data = data.data;
     blck.children = data.children || [];

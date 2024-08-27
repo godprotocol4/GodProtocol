@@ -31,6 +31,7 @@ class Opcodes {
   stdin = (object, cb) => {
     if (object == null) {
       this.flags.void = true;
+      this.flags.zero = true;
       return;
     }
     this.flags.void = false;
@@ -39,10 +40,10 @@ class Opcodes {
     if (typeof object === "number") this.flags.neg = object < 0;
 
     let code_string =
-      typeof object !== "string" ? JSON.stringify(object) : object;
+      typeof object !== "string" ? JSON.stringify(object) : `"${object}"`;
 
     this.account.assembler.run(code_string, { cb, pure: true });
-    // console.log(`Writing in: ${code_string}`);
+    // this.account.    log_output(`Writing in: ${code_string}`);
   };
 }
 
