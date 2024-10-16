@@ -105,42 +105,87 @@ class Account extends Filesystem {
     return this.manager.get_account(name) || this;
   };
 
-  manage_buffer = (callback) => {
+  manage_buffer = (callback, real_cb) => {
     let call_session = `${Date.now()}-${Math.random()}`;
-    this.mine_buffer[call_session] = { blocks: [], callback };
+    this.mine_buffer[call_session] = { blocks: [], callback, real_cb };
 
     return call_session;
   };
 
+  results = new Object()
+
   buff = (block, pid) => {
+    if(block.ret){
+      this.results[pid] = block.ret
+      return;
+    }
+
     let buffer = this.mine_buffer[pid];
     if (!buffer) return;
 
-    buffer.blocks.push(block.stringify());
+    block && block.stringify &&  buffer.blocks.push(block.stringify());
   };
 
   flush_buffer = (pid, payload) => {
     let buff = this.mine_buffer[pid];
     if (!buff) return;
 
-    buff.callback && this.run_callback(buff.callback,{ payload , blocks: buff.blocks});
+    if (buff.callback){
+      this.run_callback(buff.callback,{ payload, ret: this.results[pid] , blocks: buff.blocks});
+    } else if(buff.real_cb){
+      buff.real_cb(payload)
+    }
+    
     delete this.mine_buffer[pid];
+    delete this.results[pid]
   };
 
+  execute =( opcode, args)=>{
+    let circ = this.vm.opcodes[opcode]
+    if (typeof circ !== 'function') {return}
+
+    circ(args)
+  }
+
+  process_fee = ({fee, validator}, cb)=>{
+    let content = this.vm.read_chain(fee, {tell_callable})
+
+    if (content.callable){
+      this.vm.exec({executable: content.__address__, location:result=>{
+        this.vm.exec({executable: validator, location: result=>{
+          cb && cb(result)
+        }, arguments: {argc:1, argv: [{position: 0, static_value: result}]}})
+      } })
+    }else {
+      this.vm.exec({executable: validator, location: (result)=>{
+        cb && cb(result)
+      }, arguments: {argc:1, argv: [{position:0, address: fee}]}})
+    }
+  }
+  
   load = (payload) => {
-    let { program, callback } = payload;
-    let { instructions, assemble } = program;
+    let { program, callback, location } = payload;
+    let { instructions, assemble, forge, spawn, unshift } = program;
 
     this.propagate(payload, "load");
-
-    if (assemble) {
+    
+    if(forge){
+      let chain = this.vm.handle_chain(forge)
+      chain.forge_block({metadata:{output:this.save(instructions)}})
+    } else if (assemble) {
       this.assembler
         .spawn()
-        .run(instructions, { cb: callback, options: assemble });
+        .run(instructions, { cb: callback, location, options: assemble , unshift});
     } else {
-      let pid = this.manage_buffer(callback);
+      let pid = this.manage_buffer(location?res=>{
+        this.vm.air_object(res, {location})
+      } : callback,location&& callback);
 
-      this.manager.push({ sequence: instructions, account: this, pid });
+      this.manager.push({ sequence: instructions, spawn, account: this, pid, unshift });
+    }
+
+    if(location && callback){
+      callback({estimated_time:'-ms', callback:location})
     }
   };
 
@@ -155,7 +200,7 @@ class Account extends Filesystem {
   };
 
   run = (request) => {
-    let { payload, callback } = request;
+    let { payload, callback, location} = request;
 
     let { physical_address, query, history } = payload;
 
@@ -163,7 +208,9 @@ class Account extends Filesystem {
 
     this.propagate(request, "run");
 
-    let pid = this.manage_buffer(callback);
+    let pid = this.manage_buffer(location?res=>{
+      this.vm.air_object(res, {location})
+    } : callback,location&& callback);
 
     let context = physical_address
       ? this.manager.web.get(physical_address)
@@ -171,16 +218,19 @@ class Account extends Filesystem {
 
     if (!context) {
       if (physical_address)
-        context = this.manager.web.split_set(physical_address);
+        context = this.vm.handle_chain(physical_address);
       else return this.flush_buffer(pid);
     }
+    if(!context)throw new Error()
 
     let blk = query ? context.explore(query) : context.get_latest_block();
+
+    // console.log(context.stringify())
+    // console.log(blk)
 
     if (!query) {
       let index = context.height;
       index -= 1;
-      // console.log(index, context.height, 'mee')
 
       const historic = (blk) => {
         if (blk && blk.metadata.program) {
@@ -189,7 +239,7 @@ class Account extends Filesystem {
             blk = null;
           }
         } else blk = null;
-// console.log(blk && blk.metadata, 'hello.')
+        
         return blk;
       };
       blk = historic(blk);
@@ -199,25 +249,34 @@ class Account extends Filesystem {
         blk = context.get_block(index);
 
         blk = historic(blk);
+        // console.log(blk)
       }
     }
 
+    // console.log(blk)
+
     if (blk && blk.metadata && blk.metadata.program) {
-      // console.log(blk.metadata, blk.index, context.height)
       let program = this.read(blk.metadata.program);
-      // console.log(JSON.stringify(program, null, 2), 'prog')
 
       if (Array.isArray(program) && program.length) {
-        this.vm.contexts.push(context);
+        this.vm.push_context(context);
         program = [...program, 'pop']
+
+        // console.log(program)
 
         this.manager.push({
           sequence: program,
           account: this,
+          payload,
+          error_stack: JSON.stringify(this.vm.error_manager),
           pid,
         });
       }
-    } else this.flush_buffer(pid);
+    } else this.flush_buffer(pid,{error:true, error_message: "Program is not set!"});
+
+    if(location && callback){
+      callback({estimated_time:'-ms', callback:location})
+    }
   };
 
   run_callback = (callback, payload) => {
@@ -228,7 +287,7 @@ class Account extends Filesystem {
 
       callback.payload &&
         callback.payload.physical_address &&
-        this.vm.stdin(payload, () => this.run(callback));
+        this.vm.stdin(payload, callback);
     }, 0);
   };
 

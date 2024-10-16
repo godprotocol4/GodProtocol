@@ -2,8 +2,8 @@ import { _id } from "generalised-datastore/utils/functions";
 import Repository from "./repository";
 
 let num_pattern = /^\d+(\.\d+)?$/;
-// let str_pattern = /^["'][^"']*["']$/;
 let var_pattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+let addr_pattern = /^(@\/|\.\.\/|\.\/)?([A-Za-z0-9_\-]+\/)*[A-Za-z0-9_\-]+$/
 
 class Loader {
   constructor(account) {
@@ -17,22 +17,25 @@ class Loader {
     this.markers = new Array();
     this.program_configs = new Array();
     this.programs_index = -1;
+    
+    this.datatypes = new Array('twain', 'string','void', 'boolean', 'array', 'number')
+    this.configs = new Object()
 
     // Code Repository
     this.repository = new Repository(this);
   }
 
   instruction_index = () => {
-    let len = this.instruction_indexes.length - 1;
-    this.instruction_indexes[len]++;
+    let len = this.instruction_indexes.length -1
+    this.instruction_indexes[len]++
 
-    return this.instruction_indexes[len];
+    return this.instruction_indexes[len]
   };
 
   stack_instruction = (instruction) => {
     if (Array.isArray(instruction))
       return instruction.map((i) => this.stack_instruction(i));
-
+      
     this.instruction_stacks.slice(-1)[0].push(instruction);
   };
 
@@ -53,19 +56,33 @@ class Loader {
     }
   };
 
-  parse_tokens = (line, stop_char) => {
-    let tokens = new Array();
-    let pos = 0,
-      line_number = 0;
+  parse_tokens = (line, options) => {
+    options = options ||{}
+    let {stop_char, all_static, inline} = options;
 
-    let push_token = (value, type) =>
-      tokens.push({ value, type, line: line_number, pos });
+    let tokens = new Array();
+    let pos = 0;
+    all_static = this.pure || this.no_static?false: all_static == undefined? true: all_static;
+
+    let push_token = (value, type) =>{   
+      if (stop_char){
+        if (['variable','address', 'inline_address'].includes(type)) {
+          all_static = false
+        }
+      }
+      let tok_obj = { value, type, line: this.line_count, pos : pos-value.length}
+      if (['twain', 'array'].includes(type)){
+        tok_obj.all_static = all_static
+      }
+
+       tokens.push(tok_obj);
+      };
 
     line = line.trim();
     while (pos < line.length) {
       let char = line[pos].trim();
 
-      if (char === stop_char) return { tokens, pos };
+      if (char === stop_char) return { tokens, pos, all_static};
 
       if (!char) {
         pos++;
@@ -74,11 +91,21 @@ class Loader {
       }
 
       if (char === "\n") {
-        line_number++;
         pos++;
+      } else if (char === '/' && line[pos+1]==='/'){
+          pos = line.length
+      }else if (char === '%' && inline){
+        pos++
+        let acc = line[pos]
+        pos++
+        while (line[pos] && var_pattern.test(`${acc}${line[pos]}`)) {
+          acc += line[pos];
+          pos++;
+        }
+        push_token(acc, "inline_address");
       } else if (char === "@" || char === ".") {
         let acc = "";
-        while (line[pos] && line[pos].trim() && line[pos] !== stop_char) {
+        while (line[pos] && line[pos].trim() && (line[pos] !== stop_char) && ![','].includes(line[pos]) ) {
           acc += line[pos];
           pos++;
         }
@@ -86,17 +113,33 @@ class Loader {
       } else if (char === ",") {
         pos++;
       } else if (char === ":") {
+
         push_token(char, "separator");
         pos++;
       } else if (char === "[") {
         pos++;
-        let toks = this.parse_tokens(line.slice(pos), "]");
+        let pre_stat = all_static
+        if(!stop_char && !this.pure)all_static = true;
+        
+        let toks = this.parse_tokens(line.slice(pos),{stop_char: "]", all_static});
+        if(stop_char) all_static = toks.all_static && all_static
+        else all_static = toks.all_static 
+
         push_token([...toks.tokens], "array");
+        all_static = pre_stat
+
         pos += toks.pos + 1;
       } else if (char === "{") {
         pos++;
-        let toks = this.parse_tokens(line.slice(pos), "}");
+        let pre_stat = all_static
+        if(!stop_char && !this.pure)all_static = true;
+        
+        let toks = this.parse_tokens(line.slice(pos), {stop_char: "}", all_static});
+        if(stop_char) all_static = toks.all_static && all_static
+        else all_static = toks.all_static 
+
         push_token([...toks.tokens], "twain");
+        all_static = pre_stat
         pos += toks.pos + 1;
       } else if (char === ">") {
         pos++;
@@ -123,89 +166,181 @@ class Loader {
           pos++;
         }
         push_token(acc, "number");
-      } else if (var_pattern.test(char)) {
-        let acc = char;
+      } else if (var_pattern.test(char) || char === '(') {
+        let depthed = char==='('
+        let acc;
+        if (depthed){
+          pos++
+          acc =line[pos]
+        }else acc = char
+        
         pos++;
         while (line[pos] && var_pattern.test(`${acc}${line[pos]}`)) {
           acc += line[pos];
           pos++;
         }
+        
+        if (depthed){
+          if (line[pos] !== ')')throw new Error('Unbounded')
+          acc = `(${acc})`
+          pos++
+        }
+        
+        acc = acc.trim()
+        push_token(acc, ['True', 'False'].includes(acc)?'boolean':  acc ==='Void'?'void':this.opcodes.includes(acc) ? "opcode" : "variable");
 
-        push_token(acc, this.opcodes.includes(acc) ? "opcode" : "variable");
       }
     }
-
+    
     return tokens;
   };
 
-  parse = (token) => {
+  static_parse = ({token, previous_pure, options, identifier}, fn)=>{
+    this.pure = token.all_static?'stack':previous_pure
+
+    let physical_address = this.stacks.slice(-1)[0]
+    if(!identifier && token.all_static && !options.all_static){
+      identifier = {value: this.account.manager.oracle.hash(token, 'sha-1')}
+      if (!isNaN(Number(identifier.value[0]))){
+        identifier.value = `_${identifier.value}`
+      }
+    }
+    if (token.all_static && !options.all_static){
+      this.push_instruction(`link ${physical_address}/${identifier.value}`)
+    }
+
+    fn()
+
+    if (token.all_static && identifier &&!options.all_static){
+      this.push_instruction([
+        'cursor {output}',
+        'write {datapath:-1}'
+      ])
+      this.push_instruction(`pop ${identifier.value}`)
+    }
+
+    this.pure = previous_pure
+
+    !options.all_static && token.all_static && !options.identifier &&
+    this.push_instruction([`link ${physical_address}/${identifier.value}`, `pop ${identifier.value}`])
+  }
+
+  parse = (token, options) => {
+    options = options || {}
+    let {identifier} = options;
+
+    let previous_pure = this.pure;
     if (token.type === "string" || token.type === "number") {
-      this.push_instruction([
-        `link ${
-          this.account.physical_address
-        }/Datatypes/${`${token.type[0].toUpperCase()}${token.type.slice(1)}`}`,
-        `write ${token.value}`,
-        `pop ${token.type}`,
-      ]);
-    } else if (token.type === "array") {
-      this.push_instruction(
-        `link Accounts/${this.account.name}/Datatypes/Array`
-      );
-      token.value.map((item, i) => {
-        this.parse(item);
-
+      this.static_parse({options, previous_pure, token, identifier}, ()=>{
         this.push_instruction([
-          `cursor ${i}`,
-          `write ${
-            this.is_not_literal(item.type)
-              ? "{metadata.output:-1}"
-              : "{datapath:-1}"
-          }`,
+          `link ${
+            this.account.physical_address
+          }/Datatypes/${`${token.type[0].toUpperCase()}${token.type.slice(1)}`}`,
+          `write ${token.value}`,
+          `pop ${token.type}`,
         ]);
-      });
-      this.push_instruction(`pop Array`);
-    } else if (token.type === "twain") {
-      this.push_instruction(
-        `link Accounts/${this.account.name}/Datatypes/Twain`
-      );
-      let curs = true;
+      })
 
-      if (token.value)
-        token.value.map((entry) => {
-          if (entry.type === "separator") {
-            curs = false;
-            return;
-          }
-          this.parse(entry);
-          if (curs) {
-            {
-              this.push_instruction(
-                `cursor {*${
-                  this.is_not_literal(entry.type)
-                    ? "metadata.output:-1"
-                    : "datapath:-1"
-                }}`
-              );
+    } else if (token.type === "array") {
+     
+      this.static_parse({token, previous_pure, options, identifier}, ()=>{
+        this.push_instruction(
+          `link Accounts/${this.account.name}/Datatypes/Array`
+        );
+        if (token.value.length){
+          token.value.map((item, i) => {
+            this.parse(item, {all_static: this.pure === 'stack'});
+
+              this.push_instruction([
+                `cursor ${i}`,
+                `write ${
+                  this.is_not_literal(item.type)
+                    ? "{metadata.output:-1}"
+                    : "{datapath:-1}"
+                }`,
+              ]);
+          });
+        }
+        
+        this.push_instruction(`pop Array`);
+      })
+
+    } else if (token.type === "twain") {
+     
+      this.static_parse({token, previous_pure, options, identifier}, ()=>{
+        this.push_instruction(
+          `link Accounts/${this.account.name}/Datatypes/Twain`
+        );
+  
+        if (token.value.length){
+           let curs = true;
+          token.value.map((entry) => {
+            if (entry.type === "separator") {
+              curs = false;
+              return;
             }
-          } else {
-            this.push_instruction(
-              `write ${
-                this.is_not_literal(entry.type)
-                  ? "{metadata.output:-1}"
-                  : "{datapath:-1}"
-              }`
-            );
-            curs = true;
-          }
-        });
-      this.push_instruction(`pop Twain`);
+            this.parse(entry, {all_static: this.pure === 'stack'});
+            if (curs) {
+              {
+                this.push_instruction(
+                  `cursor {*${
+                    this.is_not_literal(entry.type)
+                      ? "metadata.output:-1"
+                      : "datapath:-1"
+                  }}`
+                );
+              }
+            } else {
+              this.push_instruction(
+                `write ${
+                  this.is_not_literal(entry.type)
+                    ? "{metadata.output:-1}"
+                    : "{datapath:-1}"
+                }`
+              );
+              curs = true;
+            }
+          });
+        }
+       
+        this.push_instruction(`pop Twain`);
+  
+      })
+     
     } else if (token.type === "variable") {
+      let tok_value = token.value;
+
+      let is_nested = this.handle_nested(tok_value)
+
       this.push_instruction([
-        `link ${`${this.stacks.slice(-1)[0]}/${token.value}`}`,
-        `pop ${token.value}`,
+        `link ${is_nested?'{metadata.output:-1}': `${this.stacks.slice(-1)[0]}/${tok_value}`}`,
+        `pop ${tok_value}`,
       ]);
+    }else if(token.type==='void'){
+      this.push_instruction([`link ${this.account.physical_address}/Datatypes/Void`, 'pop Void'])
+    }else if (token.type === 'boolean'){
+      this.push_instruction([`link ${this.account.physical_address}/Datatypes/Boolean`, `write ${token.value}`, 'pop Boolean'])
     } else if (token.type === "address") this.parse_assignment(token);
   };
+
+  handle_nested = tok_value=>{
+    let is_nested= tok_value.startsWith('(')
+    if (is_nested){
+      let val = tok_value.slice(1,-1)
+      if(val.startsWith('@') || val.startsWith('.')){
+        val = this.resolve_addr(val)
+        this.push_instruction([`link ${val}`, 'pop'])
+      } else this.push_instruction([`link ${`${this.current_program().physical_address}/${val}`}`, `pop ${val}`])
+    }
+
+    return is_nested
+  }
+
+  throw_error=(msg, token)=>{
+    let pth = this.current_program()
+    pth = pth.physical_address
+    throw new Error(`${msg}:${this.line_count}/col:${token.pos}\n\t${pth||''}`)
+  }
 
   is_not_literal = (type) =>
     !type || ["variable", "opcode", "address"].includes(type);
@@ -213,7 +348,8 @@ class Loader {
   parse_assignment = (line, linked) => {
     let tokens = linked || line.type ? line : this.parse_tokens(line);
 
-    let identifier = tokens[0];
+    let identifier = tokens[0], is_nested, curr_program;
+    
     if (linked || line.type) {
       let line_split = (line.value || line)
         .slice(line.value ? null : 1)
@@ -228,16 +364,26 @@ class Loader {
       if (line.type === "address")
         return this.push_instruction(`pop ${path[path.length - 1]}`);
     } else {
-      let curr_program = this.current_program();
+      curr_program = this.current_program();
       curr_program && curr_program.dimensions.push({ name: identifier.value });
 
-      this.push_instruction(`chain ${identifier.value}`);
-      this.stack_instruction([
-        `link ${this.stacks.slice(-1)[0]}`,
-        `chain ${identifier.value}`,
-        `pop ${identifier.value}`,
-        "pop",
-      ]);
+       is_nested = this.handle_nested(identifier.value)
+
+      this.push_instruction(`chain ${is_nested?'{metadata.output:-1}': identifier.value}`);
+
+
+      if (tokens.length > 1){
+        let pre_tok = tokens.slice(-1)[0]
+        if (pre_tok.all_static){}
+        else
+        !is_nested && this.stack_instruction([
+          `link ${this.stacks.slice(-1)[0]}`,
+          `chain ${identifier.value}`,
+          `pop ${identifier.value}`,
+          "pop",
+        ]);
+      }
+     
     }
 
     let prev_token;
@@ -246,22 +392,52 @@ class Loader {
       prev_token = tokens[1];
     } else {
       tokens.slice(1).map((tok) => {
-        this.parse(tok);
+        this.parse(tok, {identifier});
       });
       prev_token = tokens.slice(-1)[0];
     }
 
+    if (!this.pure&& !is_nested && identifier.type === 'variable'){
+       let config = this.configs[curr_program.physical_address]
+        if(!config){
+          config = {
+            parameters:[], 
+            identifiers: [], 
+            name: curr_program.program_name, 
+            __address__: curr_program.physical_address, 
+            type:'module'
+          }
+          this.configs[curr_program.physical_address] = config;
+        }else {
+          // console.log(config, 'conff')
+        }
+
+        if (tokens[1]&& this.datatypes.includes(tokens[1].type)){
+          config.parameters.push({name: identifier.value, object: tokens[1].static_value, position: config.parameters.length})
+        }else if (!tokens[1]){
+          config.parameters.push({name: identifier.value, address: `${this.account.physical_address}/Datatypes/Void`, position:config.parameters.length})
+        }
+        config.identifiers.push(identifier.value)
+    }
+   
     if (tokens.length > 1) {
-      this.push_instruction([
-        "cursor {output}",
-        `write ${
-          this.is_not_literal(prev_token && prev_token.type)
-            ? "{metadata.output:-1}"
-            : "{datapath:-1}"
-        }`,
-        `pop ${identifier.value}`,
-      ]);
+      if (prev_token && prev_token.all_static){
+        this.push_instruction([`pop ${identifier.value}`])
+      }else {
+         this.push_instruction([
+          "cursor {output}",
+          `write ${
+            this.is_not_literal(prev_token && prev_token.type) 
+              ? "{metadata.output:-1}"
+              : "{datapath:-1}"
+          }`,
+          `pop ${identifier.value}`,
+        ]);
+      }
+     
     } else this.push_instruction(`pop ${identifier.value}`);
+
+
   };
 
   current_program = () => {
@@ -270,7 +446,7 @@ class Loader {
 
   marker_pattern = /@[a-zA-Z_][a-zA-Z0-9_]*/;
 
-  parse_opcode = (line) => {
+  parse_opcode = (line, assign) => {
     let tokens = Array.isArray(line) ? line : this.parse_tokens(line);
 
     let op = tokens[0];
@@ -283,10 +459,6 @@ class Loader {
     ]);
 
     tokens.slice(1).map((tok, i) => {
-      if (tok.type === "address") {
-        tok.value = this.resolve_addr(tok.value);
-      }
-
       if (tok.type === "address" && tok.value.match(this.marker_pattern)) {
         this.push_instruction([
           `link ${this.account.physical_address}/Datatypes/Number`,
@@ -298,8 +470,8 @@ class Loader {
       this.push_instruction([
         `cursor op${i}`,
         `write ${
-          this.is_not_literal(tok.type) &&
-          !(tok.type === "address" && tok.value.match(this.marker_pattern))
+          tok.all_static || (this.is_not_literal(tok.type) &&
+          !(tok.type === "address" && tok.value.match(this.marker_pattern)))
             ? "{metadata.output:-1}"
             : "{datapath:-1}"
         }`,
@@ -318,13 +490,13 @@ class Loader {
   };
 
   resolve_addr = (addr) => {
+    let real_addr = addr;
     addr = addr.split("/");
 
-    let real_addr = "";
-
-    if (addr.length === 1) {
-      real_addr = addr.join("");
-    } else if (addr[0] === "@") {
+    if (addr.length === 1){
+      real_addr = addr.join('')
+    }
+    else if (addr[0] === "@") {
       addr[0] = this.account.physical_address;
       real_addr = addr.join("/");
     } else if (addr[0] === ".." || addr[0] === ".") {
@@ -417,7 +589,7 @@ class Loader {
       markers = new Object();
       this.markers[curr_stack] = markers;
     }
-
+    
     markers[name] = this.instruction_indexes.slice(-1)[0];
 
     this.revamp_marks();
@@ -425,7 +597,7 @@ class Loader {
     return splits.slice(1).join(" ");
   };
 
-  resolve_offset = (line, revamping, index) => {
+  resolve_offset = (line, revamping) => {
     let matches = line.match(this.marker_pattern),
       value;
     if (matches) {
@@ -440,11 +612,12 @@ class Loader {
       value = markers[match];
     }
 
-    if (typeof value === "number") {
-      line = line.replace(
+    if (typeof value === "number")
+      {line = line.replace(
         this.marker_pattern,
-        (revamping && value > 0 ? value + 1 : value).toString()
+        (revamping&&value>0?value+1: value+1).toString()
       );
+
     }
 
     return line;
@@ -487,11 +660,14 @@ class Loader {
     return spaw;
   };
 
+  line_count = 0
+
   compile = (codes) => {
     let code_array = codes.split("\n");
 
     for (let c = 0; c < code_array.length; c++) {
       let line = code_array[c].trim();
+      this.line_count++
 
       let curr_program = this.current_program();
       this.is_routine = line.startsWith(".") || line.startsWith("@");
@@ -502,24 +678,70 @@ class Loader {
 
       if (line.startsWith(":")) {
         line = this.handle_marker(line);
-
         if (!line) continue;
       }
 
-      line = this.resolve_offset(line);
+      if (this.config_flag){
+        this.handle_config(line)
+        this.config_flag = false;
+        continue;
+      }
 
-      if (line === ";") this.pop();
+      line = this.resolve_offset(line);
+      if(line.startsWith('$')){
+        this.handle_decor(line)
+        continue
+      } else if (line === ";") this.pop();
       else if (this.is_routine) this.parse_routine(line);
       else if (line.startsWith("//")) this.parse_comment(line.slice(2).trim());
       else if (line.startsWith(">@") || line.startsWith(">."))
         this.parse_assignment(line, true);
-      else if (line.startsWith(">")) this.parse_assignment(line);
-      else this.parse_opcode(line);
+      else if (line.startsWith(">")){
+        let res =this.check_recursive(line)
+        this.parse_assignment(res);
+      } else this.parse_opcode(line);
 
       (!curr_program || this.is_routine) &&
         this.handle_codes(line, this.current_program());
-    }
+
+        if (this.pure> 0)this.pure--
+      }
+      
+      this.no_static = false
   };
+
+  handle_config = config=>{
+    this.pure = true
+    this.parse_opcode(`config ${config}`)
+    this.pure = false
+  }
+
+  check_recursive=line=>{
+    line = line.slice(1).split(' ').filter(l=>!!l)
+
+    let identifier = line[0]
+    
+    let recurse =  line.slice(1).find(l=>l===identifier);
+    if (recurse){
+      let new_var = `temp_${identifier}_${this.account.manager.oracle.hash(identifier, 'sha1')}`
+      this.parse_assignment(`>${new_var} ${identifier}`)
+      line = line.slice(1).map(l=>{
+        if(l===identifier)return new_var
+        return l
+      })
+      line.unshift(identifier)
+    }
+    
+    line =`>${line.join(' ')}`
+
+    return line
+  }
+
+  handle_decor = line=>{
+    line= line.slice(1).split(' ')
+
+    this[line[0]] = Number(line[1]) || 1
+  }
 
   handle_codes = (line, curr_program) => {
     if (this.is_routine) {
@@ -537,31 +759,47 @@ class Loader {
 
   run = (codes, meta) => {
     if (!meta) meta = {};
-    let { pure, cb, options } = meta;
-    this.pure = pure;
+    let { pure, cb, options , unshift} = meta;
+    let{main, configs}=options ||{}
+    this.pure = pure? -1:0;
 
     this.compile(codes);
 
     if (meta.instructions) return [...this.instructions];
 
     // console.log(JSON.stringify(this.instructions, null, 2), "hiya");
-    if (this.pure) this.account.log_output(this.instructions);
+    if(this.pure)this.account.log_output(this.instructions)
 
     this.account.load({
-      program: { instructions: [...this.instructions] },
+      program: { instructions: [...this.instructions], unshift: !!unshift},
       callback: cb,
     });
 
     let pragma = this.program_configs[0];
     if (pragma)
       pragma.main =
-        (options && options.main) || this.repository.oracle.hash(codes);
+        (main) || this.repository.oracle.hash(codes);
     this.program_configs.map((config) => this.repository.add_program(config));
 
-    this.program_configs = [];
-    this.instructions = [];
+    if(configs === 'pragma_only'){
+      this.set_config(this.configs[pragma.physical_address])
+    }else {
+      for (let addr in this.configs){
+        let config = this.configs[addr]
+        this.set_config(config)
+      }
+    }
+    this.configs = new Object()
+
+    this.program_configs = new Array();
+    this.instructions = new Array();
     this.pure = false;
   };
+
+  set_config = (config)=>{
+    config&& 
+    this.account.execute('config', {op0: config})
+  }
 }
 
 export default Loader;

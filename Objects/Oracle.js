@@ -36,23 +36,26 @@ class Oracle {
 
     if (!obj) {
       try {
-        obj = this.fs.readFileSync(`${this.mgr.root}/${path}`);
-        obj = JSON.parse(obj).payload;
+        obj = this.fs.readFileSync(`${this.mgr.root}/${path}`, {encoding:'utf-8'});
+        obj = JSON.parse(obj);
         let type = obj && obj.payload && typeof obj.payload;
+        obj = obj && obj.payload;
         type =
           type === "object" ? (Array.isArray(obj) ? "array" : "twain") : type;
 
         obj = { type, obj };
         this.set(path, obj);
-      } catch (e) {}
+      } catch (e) {
+        // console.log(e.message, 'Error thrown?')
+      }
     }
 
     return obj;
   };
 
-  hash = (data) => {
+  hash = (data, alg) => {
     data = typeof data !== "string" ? JSON.stringify(data) : data;
-    return hash(data);
+    return hash(data, alg);
   };
 
   handle_compression = ({ addr, data, no_string }) => {
@@ -66,13 +69,13 @@ class Oracle {
     return data;
   };
 
-  write = (address, payload) => {
+  write = (address, payload) => { 
     payload = JSON.stringify({ payload });
     let data = this.handle_compression({
       addr: address,
       data: payload,
     });
-
+    
     this.fs.writeFileSync(`${this.mgr.root}/${address}`, data, {
       encoding: "utf-8",
     });

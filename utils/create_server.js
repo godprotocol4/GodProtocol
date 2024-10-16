@@ -1,7 +1,7 @@
 import http from "http";
 import { is_port_available } from "./functions";
 
-let PORT = Number(process.env.PORT) || 1409;
+let PORT = Number(process.env.PORT) || 1408;
 
 const cb = (res, data) => {
   if (typeof data !== "string") data = JSON.stringify(data);
@@ -31,6 +31,18 @@ const handle_routes = (req, res, app, manager) => {
     });
 
     req.on("end", () => {
+      if (req.method === 'GET'){
+        console.log(req.url)
+        if(req.url === '/' ){
+          res.writeHead(404, { "Content-Type": "text/html" });
+          res.end(`<h1>God Protocol</h1>`);
+        }
+          else if(req.url.startsWith('/Accounts') ){
+          manager.handle_route({req, res});
+        }
+
+        return;
+      }
       try {
         data = JSON.parse(data);
       } catch (e) {
@@ -41,6 +53,7 @@ const handle_routes = (req, res, app, manager) => {
         });
       }
 
+      
       if (req.url === "/create_account") {
         let account = manager.add_account(null, { ...data, string: true });
 
@@ -50,12 +63,7 @@ const handle_routes = (req, res, app, manager) => {
           cb(res, datagram)
         );
       } else {
-        let extension = extensions[req.url.slice(1)];
-
-        if (typeof extension !== "function") {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: true, error_message: "Not Found" }));
-        } else extension(data, { req, res });
+        manager.handle_route({req,res, data})
       }
     });
 

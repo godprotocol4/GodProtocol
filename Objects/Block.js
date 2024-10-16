@@ -9,7 +9,7 @@ class Block {
     this.children = new Array();
     this.index = this.chain.height;
     this._id = _id(this.chain.hash);
-    this.previous_hash = this.chain.recent_block && this.chain.recent_block._id;
+    this.previous_hash = this.chain.recent_block && this.chain.recent_block._id
   }
 
   generate_hash = () => {
@@ -21,21 +21,32 @@ class Block {
     if (!no_curs) this.cursor = this.chain.cursors.splice(-1)[0];
     if (!content) return;
 
-    let cursors = Object.keys(content).filter(
-      (c) => c.startsWith("{") && c.endsWith("}")
-    );
+    if (this.data.length<=1 && this.chain.account.is_datatype(this.chain)){
+      content = this.chain.account.stringify_type(this.chain)
+    }else {
+      let cursors = Object.keys(content).filter(
+        (c) => c.startsWith("{") && c.endsWith("}")
+      );
 
-    for (let c = 0; c < cursors.length; c++) {
-      let curs = cursors[c];
+      for (let c = 0; c < cursors.length; c++) {
+        let curs = cursors[c];
 
-      this.metadata[curs.slice(1, -1)] = content[curs];
-      delete content[curs];
+        this.metadata[curs.slice(1, -1)] = content[curs];
+        delete content[curs];
+      }
     }
+    
+
     this.metadata.stdout = new Array();
     this.chain.account.flush_stdout(this);
 
-    let datapath = this.chain.account.save(content, this.chain);
-    this.datapath = datapath;
+    if(!this.chain.datapath){
+      let datapath = this.chain.account.save(content, this.chain);
+      this.datapath = datapath
+    }else {
+      this.chain.account.save(content)
+      this.datapath = this.chain.datapath
+    }
   };
 
   stringify = (str) => {
@@ -49,7 +60,7 @@ class Block {
     obj.previous_hash = this.previous_hash;
     obj.data = this.data;
     obj._id = this._id;
-    obj.children = this.children.map((ch) => ch._id);
+    obj.children = this.children.map((ch) => ch && ch._id);
     obj.chain = {
       hash: this.chain.hash,
       physical_address: this.chain.physical_address,

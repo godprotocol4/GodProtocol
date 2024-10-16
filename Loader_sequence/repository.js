@@ -8,7 +8,7 @@ class Repository {
   }
 
   add_program = (config) => {
-    let codes = config.codes.filter((line) => !!line.trim());
+    let codes = config.codes.filter(line=>!!line.trim())
     let code_hash = this.oracle.hash(codes);
     let code_exist = this.codes.readone({ hash: code_hash });
 

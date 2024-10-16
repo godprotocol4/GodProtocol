@@ -1,0 +1,11 @@
+@/CONSTANTS
+./types
+>instance 'instance'
+>function 'function'
+>boolean 'boolean'
+>number 'number'
+>string 'string'
+>array 'array'
+>twain 'twain'
+;
+;

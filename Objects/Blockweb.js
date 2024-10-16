@@ -19,7 +19,7 @@ class Blockweb {
     let spli = physical_address.split("/");
 
     let chain = this.get(physical_address);
-    if (!chain) {
+    if (!chain && spli.length >1) {
       chain = this.set(spli.slice(0, -1).join("/"), spli.slice(-1)[0]);
     }
     return chain;

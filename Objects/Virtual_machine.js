@@ -6,60 +6,123 @@ class Virtual_machine extends Opcodes {
 
     this.account = context.account;
     this.contexts = [context];
-    this.stack = new Array();
     this.flags = {
       neg: false,
       equal: false,
       zero: false,
       void: false,
     };
+
+    this.stacktrace = new Array()
+
+    this.error_manager = new Object()
+  }
+  
+  push_int = (name, payload)=>{
+    let stacks = this.error_manager[name]
+    if (!stacks){
+      stacks = new Array()
+      this.error_manager[name] = stacks;
+    }
+
+    stacks.push(payload)
   }
 
-  get_context = (index) => {
-    return this.contexts.slice(index == null ? -1 : index)[0];
-  };
-
-  parse_arg = (arg, is_cursor) => {
-    let context = this.get_context();
-
-    let args = arg.split("/"),
-      i = 0;
-
-    while (args[0] === "..") {
-      i++;
-
-      args.splice(0, 1);
+  quit = (payload)=>{
+    let instruction = this.track.sequence[this.track.pointer-1]
+    if(instruction==='ret'){
+      this.account.buff({ret:payload.op0}, this.track.pid)
     }
 
-    i = (i + 1) * -1;
-    context = i ? this.get_context(i) : context;
+    this.account.flush_buffer(this.track.pid, payload);
+    this.track.pointer = this.track.sequence.length;
+    this.pop_context()
+  }
 
-    arg = args.join("/");
+  stderr = (err_object)=>{
+    console.log(err_object)
+    let{name, message} = err_object;
 
-    while (arg.includes("^")) {
-      let blk = context.connections.slice(-1)[0];
-      if (!blk) break;
-      context = blk.chain;
-      let i = arg.indexOf("^");
-      arg = `${arg.slice(0, i)}${arg.slice(i + 1)}`;
+    if (!name){
+      return this.quit(err_object)
     }
 
-    if (arg.startsWith("{*") && is_cursor) {
-      arg = context.explore(arg.slice(2, -1));
-    } else if (arg.startsWith("{") && !is_cursor) {
-      arg = context.explore(arg.slice(1, -1));
+    let all = this.error_manager['*']
+    let stacks = this.error_manager[name]
+
+    if (!stacks){
+      if(all){
+        all = all.slice(-1)[0]
+        let object = this.read_chain(`${this.error_instance_address}/${name}_`)
+        stacks = [{object, metadata: all.metadata, catch_pointer: all.catch_pointer}]
+
+        if(!object)return this.quit({message: `Unknown Error instance - ${name}`})
+      }
+      
+      if (!stacks)
+      return this.quit(err_object)
+    }else if(all){
+      // Check precedence within all and stacks name, how?
     }
 
-    return arg;
-  };
+    let obj_payload, s;
+    for(s = this.stacktrace.length - 1; s >= 0; s--){
+      let trace = this.stacktrace[s]
+      let should_break;
 
-  split_instruction = (instruction) => {
-    let split = instruction.split(" ");
-    let opcode = split[0],
-      args = split.slice(1).join(" ");
+      for (let t = stacks.length-1; t >= 0; t--){
+        obj_payload = stacks[t]
+        if(obj_payload.metadata.namespace === trace){
+          should_break = true
+          break;
+        }
+      }
+      if (should_break) break;
+    }
 
-    return { opcode, args };
-  };
+
+    if (!obj_payload){
+      return this.quit(err_object)
+    }
+
+    if(obj_payload.metadata.alias){
+      // Instantiate error message as an aircode string object.
+      let message_string = `${obj_payload.metadata.namespace}/${this.id_hash(
+        message
+      )}`;
+      this.air_object(message, {
+        location: message_string,
+        callback: () => {
+          this.exec({
+            executable: obj_payload.object.set_message,
+            location: obj_payload.metadata.alias,
+            metadata: {
+              callback: () => {
+                this.slice_trace(s+1)
+
+                this.track = this.account.manager.set_track({account: this.account.name, physical_address: obj_payload.metadata.namespace, pointer: obj_payload.catch_pointer}, true)
+              },
+            },
+            arguments: {
+              argv: [
+                {
+                  address: message_string,
+                  position: 0,
+                },
+              ],
+              argc: 1,
+            },
+          });
+        },
+      });
+     
+    }else {
+      this.slice_trace(s-3)
+      
+      this.track = this.account.manager.set_track({account: this.account.name, physical_address: obj_payload.metadata.namespace, pointer: obj_payload.catch_pointer}, true)
+
+    }
+  }
 
   execute = (instruction, track) => {
     this.track = track;
@@ -79,13 +142,15 @@ class Virtual_machine extends Opcodes {
 
     let chain;
 
-    args = this.parse_arg(args, opcode === "cursor");
+    args = this.parse_arg(args, opcode);
 
     switch (opcode) {
       case "chain":
-        chain = context.account.add_chain(args, context);
+        chain = this.handle_chain(args, context)
 
-        this.contexts.push(chain);
+        if(!chain)return this.stderr(`Chain error - ${args}`)
+       
+        this.push_context(chain);
 
         let dim = context.folder.config.dimensions;
         if (!dim) {
@@ -98,29 +163,15 @@ class Virtual_machine extends Opcodes {
 
         break;
       case "link":
-        let web = context.account.manager.web;
-        chain = web.get(args) || web.split_set(args);
+        chain = this.handle_chain(args, context)
 
         if (!chain) {
-          this.account.flush_buffer(this.track.pid, {
-            error: true,
-            error_message: `LINKing Failed. - ${args}`,
-          });
-          this.track.pointer = this.track.sequence.length;
-
-          console.log(`LINKing Failed. - ${args}`);
-          return;
+         return this.stderr(`LINKing Failed. - ${args}`)
         }
 
         chain.append_buffer();
 
-        this.contexts.push(chain);
-
-        break;
-      case "mine":
-        let bloc = context.mine(this, true);
-
-        this.account.buff(bloc, this.track.pid);
+        this.push_context(chain);
 
         break;
       case "pop":
@@ -128,15 +179,31 @@ class Virtual_machine extends Opcodes {
         if (context.txs.length > 1) {
           blk = context.mine(this);
         } else {
-          blk = context.get_latest_block();
-          if (blk) this.get_context(-2).connections.push(blk);
+          if (this.account.initiated&& this.account.is_datatype(context)){
+            blk= context.mine(this)
+          }else {
+            blk = context.get_latest_block();
+            if(!blk || context.datapath){
+              if(context.datapath){
+                blk = context.fabricate_datapath_block()
+              }else blk = this.get_voided_block()
+            }
+            
+            if (blk){
+              if (blk.chain.physical_address!== `${this.account.physical_address}/Datatypes/Void`) this.flags.void = false
 
-          context.get_buffer();
-          context.txs = [];
+              this.get_context(-2).connections.push(blk);
+            }
+
+            context.get_buffer()
+            context.txs = [];
+          }
+         
         }
+
         blk && this.account.buff(blk, this.track.pid);
 
-        this.contexts.pop();
+        this.pop_context();
         break;
       case "cursor":
         context.set_cursor(args);

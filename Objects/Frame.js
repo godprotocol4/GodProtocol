@@ -8,15 +8,14 @@ class Frame {
       ? array_to_nested_objects(object)
       : object;
 
-    this.children = new Array();
     this.instructions = new Array();
   }
 
   frame = (object) => {
     let frame = new Frame(object, this);
+    frame.account = this.account;
 
     this.instructions.push(frame);
-    this.children.push(frame);
 
     return frame;
   };
@@ -26,7 +25,14 @@ class Frame {
       let val = this.object[prop];
       this.instructions.push(`chain ${prop}`);
 
-      val && this.frame(val).to_instruction();
+      if(val && val.__type){
+        let instructions = this.account.assembler.run(JSON.stringify(val.value), {instructions: true, pure: true})
+
+        this.instructions.push(...instructions)
+
+        this.instructions.push(`cursor {output}`)
+        this.instructions.push(`write {datapath:-1}`)
+      }else val && this.frame(val).to_instruction();
 
       this.instructions.push(`pop ${prop}`);
     }
@@ -40,6 +46,7 @@ class Frame {
       if (ins instanceof Frame) inss.push(...ins.flatten_instructions());
       else inss.push(ins);
     }
+
     return inss;
   };
 }

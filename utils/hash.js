@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
-const hash = (data) => {
-  let hash = crypto.createHash("sha256");
+const hash = (data, alg) => {
+  let hash = crypto.createHash(alg|| "sha256");
 
   hash.update(data);
 

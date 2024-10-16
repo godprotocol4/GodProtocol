@@ -12,13 +12,15 @@ const post_request = (payload, cb) => {
   //   },
   // };
 
+  let data = typeof payload.data !== 'string' ? JSON.stringify(payload.data) : payload.data
+  
   let req = http.request(
     {
       ...payload.options,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(payload.data),
+        "Content-Length": Buffer.byteLength(data),
       },
     },
     (res) => {
@@ -37,11 +39,11 @@ const post_request = (payload, cb) => {
   );
 
   req.on("error", (e) => {
-    cb(e.message);
+    cb && cb(e.message);
     console.error(`Problem with request: ${e.message}`);
   });
 
-  req.write(payload.data);
+  req.write(data);
 
   req.end();
 };
